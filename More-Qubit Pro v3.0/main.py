@@ -485,7 +485,7 @@ def lower_bound_with_SDP(H, N, M, K, P):
 
     return energy_C01
 
-# SDP problem
+# SDP problem variables and constraints
 def SDP_variables_C0(ep, measurement_dataset, N, M, K, P):
     '''Define SDP variables'''
     dm = []
@@ -508,7 +508,7 @@ def constraints_C0(ep, coef, dm_tilde, measurement_dataset, N, M, K, P):
         constraints += [dm_tilde[i] >> 1e-8]
     for i in range(K - 1):  # physically compatitble
         constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
-                        cp.partial_trace(dm_tilde[i + 1], dims=[2] * M, axis=M - 1)]
+                        cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
 
     sigma = np.zeros((K, P))
     for i in range(K):
@@ -627,6 +627,42 @@ def constraints_C2(ep_C2, coef, dm_tilde, dm_tilde_C2, measurement_dataset, N, M
     constraints_C2 += [ep_C2 >= -sigma, ep_C2 <= sigma]
 
     return constraints_C2
+def constraints_CWM(ep, coef, dm_tilde_C1, measurement_dataset, N, M, G):
+    '''Define the constraints of weak monotonicity (CWM):
+       1. Weak monotonicity: For any state rho_ABC on systems ABC, we have: S(A|B) + S(A|C) >= 0
+       2. Here we only consider WM for each 3-body global state
+       
+       Comments: 
+       Unlike the classical conditional entropy, the conditional quantum entropy can be negative.
+    '''
+    K_3body = N-G+1 # Number of 3-body subsystems
+    P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
+
+    constraints_WM = []
+    for i in range(K_3body):
+        constraints_WM += [( cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1))+
+                           cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0)) ) 
+                           >= 
+                           ( cp.von_neumann_entr(cp.partial_trace(
+                                cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0), dims=[2]*(G-1), axis=0
+                           )) + 
+                           cp.von_neumann_entr(cp.partial_trace(
+                                cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1), dims=[2]*(G-1), axis=G-2
+                           )) )
+                           ]
+
+
+#     # constraints_WM = []
+#     # for i in range(K): # non-negative eigenvalues
+#     #     constraints_WM += [dm_tilde[i] >> 1e-8]  
+#     # for i in range(K_3body):
+#     #     constraints_WM += [cp.von_neumann_entr(dm_tilde[i])+cp.von_neumann_entr(dm_tilde[i+1]) >= 
+#     #                        cp.von_neumann_entr(cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=M-1))+
+#     #                        cp.von_neumann_entr(cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=0))]
+
+    return constraints_WM
+
+# Solve the SDP problems
 def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
@@ -634,6 +670,7 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     dm_tilde_copy0 = dm_tilde
     dm_tilde_copy1 = dm_tilde
     dm_tilde_copy01 = dm_tilde
+    dm_tilde_copyWM = dm_tilde
 
     # Solve SDP with conditions C0
     constraints0 = constraints_C0(ep, coef, dm_tilde_copy0, measurement_dataset, N, M, K, P)
@@ -691,6 +728,27 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     energy_C01 = prob_C01.solve(solver=cp.SCS, verbose=False)
     if prob_C01.status != cp.OPTIMAL:
         energy_C01 = float('inf') 
+
+
+    # # Solve SDP with conditions C1+C0+WM
+    # constraints_0 = constraints_C0(ep, coef, dm_tilde_copyWM, measurement_dataset, N, M, K, P)
+    # constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copyWM, dm_tilde_C1, measurement_dataset, N, M, G)
+    # constraints_WM = constraints_CWM(ep, coef, dm_tilde_C1, measurement_dataset, N, M, G)
+    # H_exp_WM = 0
+    # for i in range(K):
+    #     H_exp_WM = H_exp_WM + H @ dm_tilde_copyWM[i]
+    # prob_WM = cp.Problem(
+    #     cp.Minimize(
+    #         cp.real(
+    #             cp.trace(
+    #                 H_exp_WM
+    #             )
+    #         )
+    #     ), constraints_0 + constraints_1 + constraints_WM
+    # )
+    # energy_WM = prob_WM.solve(solver=cp.MOSEK, verbose=False)
+    # if prob_WM.status != cp.OPTIMAL:
+    #     energy_WM = float('inf') 
 
     return energy_C0, energy_C1, energy_C01
 def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
@@ -812,16 +870,16 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     low = 0
     high = higher_bound
     max_iter = 6
-
-    energy_C0, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+   
+    energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
     coef = high
     
     # If no solution exists within the initial higher bounds, increase the higher bound.
-    while (math.isinf(energy_C0) or math.isinf(energy_C01)) and max_iter > 0:
+    while (math.isinf(energy_C0) or math.isinf(energy_C1) or math.isinf(energy_C01)) and max_iter > 0:
         low = high
         high = 2*high
         max_iter = max_iter-1
-        energy_C0, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
 
     # If still no solution after expanding the bounds, return an error message.
     if max_iter == 0:
@@ -830,24 +888,25 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     # Perform the binary search within the updated bounds.
     while abs(high - low) >= threshold:
         coef = low + abs(high - low) / 2
-        energy_C0_result, energy_C01_result = SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
-        if (math.isinf(energy_C0_result) or math.isinf(energy_C01_result)):
+        energy_C0_result, energy_C1_result, energy_C01_result = SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        if (math.isinf(energy_C0_result) or math.isinf(energy_C1) or math.isinf(energy_C01_result)):
             low = coef
         else:
             high = coef
             energy_C0 = energy_C0_result
+            energy_C1 = energy_C1_result
             energy_C01 = energy_C01_result
 
     # # Perform the binary search within the updated bounds.
     # while abs(high - low) > threshold or (math.isinf(energy_C0) or math.isinf(energy_C01)):
     #     coef = low + abs(high - low) / 2
-    #     energy_C0, energy_C01 = SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+    #     energy_C0, energy_C01 = SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
     #     if (math.isinf(energy_C0) or math.isinf(energy_C01)):
     #         low = coef
     #     else:
     #         high = coef
 
-    return energy_C0, energy_C01, coef
+    return energy_C0, energy_C1, energy_C01, coef
 def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
     '''Use bi-search method to find the approximation of ground state energy
     '''
@@ -875,7 +934,7 @@ def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measur
     return energy_C0_gs, energy_C01_gs, coef
 
 # Main functions
-def jordi(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
+def jordi_min(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
     '''Solve the SDP minimization and maximization problem with the two different constraints for a list of number of measurement
     '''
 
@@ -886,10 +945,6 @@ def jordi(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
     E_min_C1 = []
     E_min_C01 = []
     coef_min = []
-
-    E_max_C0 = []
-    E_max_C1 = []
-    E_max_C01 = []
 
     for N_meas in N_meas_list:
         path = f'meas_dataset/N={N}/N{N}_Meas{N_meas}.npy'
@@ -914,12 +969,6 @@ def jordi(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
         E_min_C01.append(E_min_C01_value)
         coef_min.append(coef_min_value)
         
-        # Energy with SDP - minimum
-        E_max_C0_value, E_max_C1_value, E_max_C01_value = SDP_solver_max(coef_min_value+threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H_local, measurement_dataset, N, M, K, P)
-        E_max_C0.append(E_max_C0_value)
-        E_max_C1.append(E_max_C1_value)
-        E_max_C01.append(E_max_C01_value)
-
         # Average energy calculated from measurements
         E_min_and_max = gs_energy_estimate(measurement_dataset, 0.99, H_global_list)
         E_min.append(E_min_and_max[0])
@@ -927,40 +976,89 @@ def jordi(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
 
         print("Case N_meas =", N_meas, "finished")
 
-    return E_min, E_min_C0, E_min_C1, E_min_C01, E_max, E_max_C0, E_max_C1, E_max_C01, coef_min
-def get_SDP_dataset(num_of_shot, N_meas_list, higher_bound, threshold, N, M, K, P):
+    return E_min_C0, E_min_C1, E_min_C01, coef_min, E_min, E_max
+def jordi_max(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
+    '''Solve the SDP minimization and maximization problem with the two different constraints for a list of number of measurement
+    '''
+
+    E_max_C0 = []
+    E_max_C1 = []
+    E_max_C01 = []
+    coef_max = []
+
+    for N_meas in N_meas_list:
+        path = f'meas_dataset/N={N}/N{N}_Meas{N_meas}.npy'
+        data = np.load(path, allow_pickle=True)
+        measurement_dataset = data[repetition]
+        measurement_dataset = {key: value for key, value in measurement_dataset.items() if value} # For reducing the complexity
+        N_meas_sub = N_meas * (3 ** (N - M))
+
+        ep = cp.Variable((K, P))
+        ep_C1 = cp.Variable((N-G+1, 4**G-1))
+        dm_tilde, dm_hat = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
+        dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G)
+        
+        # Energy with SDP - maximum
+        E_max_C0_value, E_max_C1_value, E_max_C01_value, coef_max_value = biSection_search_max(higher_bound, threshold, 
+                                                                               ep, ep_C1, dm_tilde, dm_tilde_C1, 
+                                                                               H_local, measurement_dataset, 
+                                                                               N, M, K, P
+                                                                               )
+        E_max_C0.append(E_max_C0_value)
+        E_max_C1.append(E_max_C1_value)
+        E_max_C01.append(E_max_C01_value)
+        coef_max.append(coef_max_value)
+
+        print("Case N_meas =", N_meas, "finished")
+
+    return E_max_C0, E_max_C1, E_max_C01, coef_max
+def get_SDP_dataset_min(num_of_shot, N_meas_list, higher_bound, threshold, N, M, K, P):
     '''Get the dataset of the solution of the SDP problems
     '''
 
     data = {}
-    data['E_min'] = []
-    data['E_max'] = []
     data['E_min_C0'] = []
     data['E_min_C1'] = []
     data['E_min_C01'] = []
-    data['E_max_C0'] = []
-    data['E_max_C1'] = []
-    data['E_max_C01'] = []
+    data['coef_min'] = []
 
-    coef_data = {}
-    coef_data['coef_min'] = []
-
+    data['E_min'] = []
+    data['E_max'] = []
+    
     for repetition in range(num_of_shot):
-        E_min, E_min_C0, E_min_C1, E_min_C01, E_max, E_max_C0, E_max_C1, E_max_C01, coef_min = jordi(
+        E_min_C0, E_min_C1, E_min_C01, coef_min, E_min, E_max = jordi_min(
             repetition, 
             N_meas_list, higher_bound, threshold, 
             N, M, K, P
         )
-        data['E_min'].append(E_min)
         data['E_min_C0'].append(E_min_C0)
         data['E_min_C1'].append(E_min_C1)
         data['E_min_C01'].append(E_min_C01)
+        data['coef_min'].append(coef_min)
+        data['E_min'].append(E_min)
         data['E_max'].append(E_max)
+    return data
+def get_SDP_dataset_max(num_of_shot, N_meas_list, higher_bound, threshold, N, M, K, P):
+    '''Get the dataset of the solution of the SDP problems
+    '''
+
+    data = {}
+    data['E_max_C0'] = []
+    data['E_max_C1'] = []
+    data['E_max_C01'] = []
+    data['coef_max'] = []
+
+    for repetition in range(num_of_shot):
+        E_max_C0, E_max_C1, E_max_C01, coef_max = jordi_max(
+            repetition, 
+            N_meas_list, higher_bound, threshold, 
+            N, M, K, P
+        )
         data['E_max_C0'].append(E_max_C0)
         data['E_max_C1'].append(E_max_C1)
         data['E_max_C01'].append(E_max_C01)
-        coef_data['coef_min'].append(coef_min)
-    return data, coef_data
+        data['coef_max'].append(coef_max)
+    return data
 def process_SDP_dataset(data, num_of_shot, num_data_point):
     '''Given the dataset of SDP problem results,
        return the mean value and standard deviation
@@ -1085,49 +1183,3 @@ def time_cost_max_C0(H, measurement_dataset, N, M, K, P):
     energy_C0 = prob_C0.solve(solver=cp.SCS, verbose=False)
 
     return energy_C0, coef
-
-
-
-
-N = 3 # Number of qubits of the entire system
-M = 2 # Number of qubits of subsystems
-G = 3 # Number of qubits of partial global system (C1)
-K = N-M+1 # Number of subsystems
-P = 4**M-1 # Number of Pauli basis for each subsystem
-
-PauliStrList = generate_PauliStrList(N)[1:]
-PauliStrList_part = generate_PauliStrList(M)[1:]
-PauliStrList_Gbody = generate_PauliStrList(G)[1:]
-
-H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
-H_global_list = Hamiltonian_global(H_local_list, N, M, K) # Pauli string representation of the Hamiltonian of the whole system
-H_local = np.array( Hamiltonian_matrix(H_local_list) ) # Matrix representation of the local Hamiltonian of subsystems
-H_global = np.array( Hamiltonian_matrix(H_global_list) ) # Matrix representation of the Hamiltonian of the whole system
-
-ground_state_energy, ground_state_dm = ground_state(H_global) 
-q_state = DensityMatrix(ground_state_dm) 
-lower_bound = lower_bound_with_SDP(H_local, N, M, K, P)
-
-num_data_point = 15 # number of N_meas that we select to run
-N_meas_list = N_meas_list_func(100, 100000, num_data_point) # A list of number of measurement performed in all basis
-num_of_shot = 100 # Number of repeatation of the experiment
-
-higher_bound = 0.1 # Starting trial value for the bi-search method
-threshold = 0.01 # Accuracy of the minimum relaxation value 
-data, coef_data = get_SDP_dataset(num_of_shot=num_of_shot,
-                       N_meas_list=N_meas_list,
-                       higher_bound=higher_bound,
-                       threshold=threshold,
-                       N=N,
-                       M=M,
-                       K=K,
-                       P=P)
-
-E_mean, E_std = process_SDP_dataset(data, num_of_shot, num_data_point)
-
-name1 = 'data_N' + str(N) + '_threshold' + str(threshold)
-name2 = 'coef_N' + str(N) + '_threshold' + str(threshold)
-filename1 = '%s.npy' % name1
-filename2 = '%s.npy' % name2
-np.save(filename1, data)
-np.save(filename2, coef_data)
