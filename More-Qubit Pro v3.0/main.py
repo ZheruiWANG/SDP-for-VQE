@@ -1183,3 +1183,57 @@ def time_cost_max_C0(H, measurement_dataset, N, M, K, P):
     energy_C0 = prob_C0.solve(solver=cp.SCS, verbose=False)
 
     return energy_C0, coef
+
+
+N = 7 # Number of qubits of the entire system
+M = 2 # Number of qubits of subsystems
+G = 3 # Number of qubits of partial global system (C1)
+K = N-M+1 # Number of subsystems
+P = 4**M-1 # Number of Pauli basis for each subsystem
+
+PauliStrList = generate_PauliStrList(N)[1:]
+PauliStrList_part = generate_PauliStrList(M)[1:]
+PauliStrList_Gbody = generate_PauliStrList(G)[1:]
+
+H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
+H_global_list = Hamiltonian_global(H_local_list, N, M, K) # Pauli string representation of the Hamiltonian of the whole system
+H_local = np.array( Hamiltonian_matrix(H_local_list) ) # Matrix representation of the local Hamiltonian of subsystems
+H_global = np.array( Hamiltonian_matrix(H_global_list) ) # Matrix representation of the Hamiltonian of the whole system
+
+ground_state_energy, ground_state_dm = ground_state(H_global) 
+q_state = DensityMatrix(ground_state_dm) 
+lower_bound = lower_bound_with_SDP(H_local, N, M, K, P)
+
+num_data_point = 15 # number of N_meas that we select to run
+N_meas_list = N_meas_list_func(100, 100000, num_data_point) # A list of number of measurement performed in all basis
+N_meas_list = N_meas_list[0:6]
+num_of_shot = 10 # Number of repeatation of the experiment
+
+higher_bound = 0.1 # Starting trial value for the bi-search method
+threshold = 0.001 # Accuracy of the minimum relaxation value 
+data_min = get_SDP_dataset_min(num_of_shot=num_of_shot,
+                       N_meas_list=N_meas_list,
+                       higher_bound=higher_bound,
+                       threshold=threshold,
+                       N=N,
+                       M=M,
+                       K=K,
+                       P=P)
+data_max = get_SDP_dataset_max(num_of_shot=num_of_shot,
+                       N_meas_list=N_meas_list,
+                       higher_bound=higher_bound,
+                       threshold=threshold,
+                       N=N,
+                       M=M,
+                       K=K,
+                       P=P)
+
+E_mean_min, E_std_min = process_SDP_dataset(data_min, num_of_shot, num_data_point)
+E_mean_max, E_std_max = process_SDP_dataset(data_max, num_of_shot, num_data_point)
+
+name = 'data_N' + str(N) + '_threshold' + str(threshold)
+filename_min = '%s_min.npy' % name
+filename_max = '%s_max.npy' % name
+
+np.save(filename_min, data_min)
+np.save(filename_max, data_max)
