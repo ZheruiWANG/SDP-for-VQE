@@ -1206,7 +1206,6 @@ lower_bound = lower_bound_with_SDP(H_local, N, M, K, P)
 
 num_data_point = 15 # number of N_meas that we select to run
 N_meas_list = N_meas_list_func(100, 100000, num_data_point) # A list of number of measurement performed in all basis
-N_meas_list = N_meas_list[0:6]
 num_of_shot = 10 # Number of repeatation of the experiment
 
 higher_bound = 0.1 # Starting trial value for the bi-search method
