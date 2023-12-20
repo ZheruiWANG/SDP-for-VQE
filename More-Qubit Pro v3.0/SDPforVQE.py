@@ -1,3 +1,5 @@
+# Defined functions
+
 import argparse
 import time
 import random
@@ -15,11 +17,15 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix, Operator, Pauli, partial_trace, state_fidelity, random_density_matrix
 from qiskit.visualization import plot_histogram, plot_state_city, plot_bloch_multivector, plot_state_paulivec, plot_state_hinton, plot_state_qsphere
 from qiskit.tools.monitor import job_monitor
+from typing import TYPE_CHECKING, List, Dict, Any, Union, Iterable
+
 import os
 #os.environ["OMP_NUM_THREADS"] = "10"
 
+
+#----------------------------------------------------------------------------------------------------------------------
 # Generate measurement dataset
-def meas(qubits_meas_basis, state, num_meas, N):
+def meas(qubits_meas_basis:List[int], state:DensityMatrix, num_meas:int, N:int) -> List[str]:
     ''' Given a Pauli basis (0-Z, 1-X, 2-Y), do measurement and return its outcome
     Args:
         qubits_meas_basis: A list representing measuring basis, e.g.: [0,0,0] is 'ZZZ'
@@ -50,7 +56,8 @@ def meas(qubits_meas_basis, state, num_meas, N):
     # Note: in qiskit, qubit number counts from the left,
     # e.g.: '00101' means we measure qubit0 a '1'.
     return outcome
-def number_to_Pauli(pauli_num_str, N):
+
+def number_to_Pauli(pauli_num_str:str, N:int) -> str:
     ''' Given a number string, return the corresponding Pauli string
         0-Z, 1-X, 2-Y
     E.g.:
@@ -67,7 +74,8 @@ def number_to_Pauli(pauli_num_str, N):
         else:
             pauli_basis_list[i] = 'Z'
     return ''.join(pauli_basis_list)
-def random_distribute(N_meas, N):
+
+def random_distribute(N_meas:int, N:int) -> List[int]:
     '''N_meas is the total number of measurements for all basis
     '''
     quotient = N_meas//3**N
@@ -81,7 +89,8 @@ def random_distribute(N_meas, N):
         num_of_meas_list[lucky_dog[i]] = num_of_meas_list[lucky_dog[i]]+1
 
     return num_of_meas_list
-def generate_meas_dataset(state, N_meas, N):
+
+def generate_meas_dataset(state:DensityMatrix, N_meas:int, N:int) -> Dict[str,List[str]]:
     '''Generate measurement dataset for a N-qubit quantum state
     Args:
         state: A quantum state from Qiskit
@@ -97,7 +106,8 @@ def generate_meas_dataset(state, N_meas, N):
         meas_outcome_string = meas(qubits_meas_basis, state, int(num_meas_list[i]), N)
         Dict_meas_outcome[number_to_Pauli(''.join(qubits_meas_basis), N)] = meas_outcome_string
     return Dict_meas_outcome
-def tenToAny(origin, N, n):
+
+def tenToAny(origin:int, N:int, n:int) -> List[str]:
     # 10进制转换为n进制list
     list = []
     while True:
@@ -112,7 +122,8 @@ def tenToAny(origin, N, n):
     while len(list) < N:
         list.insert(0, '0')
     return list
-def generate_PauliStrList(N):
+
+def generate_PauliStrList(N:int) -> List[str]:
     ''' Given the number of qubits N, return its corresponding Pauli vector.
     E.g.:
         INPUT: N=2
@@ -134,24 +145,14 @@ def generate_PauliStrList(N):
         Pauli_str_list.append(''.join(pauli_basis_list))
 
     return Pauli_str_list
-def generate_sub_PauliStrList(PauliStrList, index):
-    # Stupid version
+
+def generate_sub_PauliStrList(N:int, index_list:List[int]) -> List[str]:
+    # Less-complexity version
     ''' Given a index (list) of qubits, retrun the Pauli vectors of this sub system.
     E.g.:
         INPUT: PauliStrList=['III',...'ZZZ'], index=[0,2]
         OUTPUT: ['III','IIX','IIY','IIZ','XII','XIX',...'ZIZ']
     '''
-    output = list()
-    no_meas = list(set(list(range(N))) - set(index))
-    for i in PauliStrList:
-        trigger = bool(1)
-        for j in no_meas:
-            trigger = bool(trigger and i[int(j)] == 'I')
-        if trigger: output.append(i)
-
-    return output
-def generate_sub_PauliStrList(N, index_list):
-    # Less-complexity version
     base_string = 'I' * N
     output_strings = []
 
@@ -166,7 +167,8 @@ def generate_sub_PauliStrList(N, index_list):
         output_strings.append(''.join(temp_string))
 
     return output_strings
-def parity_check(meas_string):
+
+def parity_check(meas_string:List[str]) -> List[int]:
     ''' Given a measurement outcome binary string array,
         return 0 if #1 in the string is even, otherwise return 1 for each element
     E.g.:
@@ -182,7 +184,8 @@ def parity_check(meas_string):
         else:
             meas_parity[i] = -1
     return meas_parity
-def exp_var_calculator(measurement_dataset, pauli_basis_str):
+
+def exp_var_calculator(measurement_dataset:Dict[str,List[str]], pauli_basis_str:str) -> (float,float):
     ''' Given a Pauli basis (on partial qubits, e.g.: XIXZY, IIIXX, ZIIII, etc.) and dataset,
         return its applicable measurement outcome expectation value and variance.
     '''
@@ -210,7 +213,8 @@ def exp_var_calculator(measurement_dataset, pauli_basis_str):
         variance = np.var(meas_outcome)
 
     return expectation_value, variance
-def num_meas_sub_calculator(measurement_dataset, pauli_basis_str):
+
+def num_meas_sub_calculator(measurement_dataset:Dict[str,List[str]], pauli_basis_str:str) -> int:
     ''' Given a Pauli basis (on partial qubits, e.g.: XIXZY, IIIXX, ZIIII, etc.) and dataset,
         return the number of measurements performed in this basis
     '''
@@ -227,7 +231,8 @@ def num_meas_sub_calculator(measurement_dataset, pauli_basis_str):
             output[j] = words[:index_I] + words[(index_I + 1):]
 
     return len(output)
-def pauliToMatrix(pauli_str):
+
+def pauliToMatrix(pauli_str:str) -> qutip.qobj.Qobj:
     '''Given a Pauli string basis (str),
        output its corresponding matrix representation (Qobj data).
     '''
@@ -242,7 +247,8 @@ def pauliToMatrix(pauli_str):
         else:
             pauli_basis_list.append(sigmaz())
     return tensor(pauli_basis_list)
-def q_tomography_dm(qubit_index, measurement_dataset, N):
+
+def q_tomography_dm(qubit_index:List[int], measurement_dataset:Dict[str,List[str]], N:int) -> qutip.qobj.Qobj:
     ''' Do quantum tomography for certain qubits according to the index,
         output the constructed density matrix.
     '''
@@ -253,7 +259,8 @@ def q_tomography_dm(qubit_index, measurement_dataset, N):
         density_matrix += expectation * pauliToMatrix(sub_basis)
     density_matrix += tensor([qeye(2)] * len(qubit_index))
     return 1 / (2 ** len(qubit_index)) * density_matrix
-def q_tomography_vec(qubit_index, measurement_dataset):
+
+def q_tomography_vec(qubit_index:List[int], measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
     ''' Do quantum tomography for certain qubits according to the index,
         output a list of expectation value.
     '''
@@ -262,13 +269,15 @@ def q_tomography_vec(qubit_index, measurement_dataset):
         expectation, variance = exp_var_calculator(measurement_dataset, basis)
         bloch_vec.append(expectation)
     return bloch_vec
-def Wald_interval(qubit_index, confidence_level, measurement_dataset, N):
+
+def Wald_interval(qubit_index:List[int], confidence_level:float, 
+                  measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
     ''' Given a qubit index (e.g. [0,1,2], in order of 01234...),
         return the corresponding Wald_interval for each expectation value
     '''
     error_rate = 1 - confidence_level
     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
-    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset))
+    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset, N))
     p_vec = 0.5 * (1 + mean_vec)
 
     basis_list = generate_sub_PauliStrList(N, qubit_index)
@@ -278,7 +287,9 @@ def Wald_interval(qubit_index, confidence_level, measurement_dataset, N):
         sigma.append(2 * z * ((p_vec[i] * (1 - p_vec[i]) / num_meas_sub) ** 0.5))
 
     return sigma
-def Wald_interval_bisection(coef, qubit_index, confidence_level, measurement_dataset, N):
+
+def Wald_interval_bisection(coef:float, qubit_index:List[int], confidence_level:float, 
+                            measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
     ''' Given a qubit index (in order of 01234...),
         return the corresponding Wald_interval for each expectation value.
         But here "bisection" means we add an additional coefficient,
@@ -286,7 +297,7 @@ def Wald_interval_bisection(coef, qubit_index, confidence_level, measurement_dat
     '''
     error_rate = 1 - confidence_level
     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
-    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset))
+    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset, N))
     p_vec = 0.5 * (1 + mean_vec)
 
     basis_list = generate_sub_PauliStrList(N, qubit_index)
@@ -296,7 +307,9 @@ def Wald_interval_bisection(coef, qubit_index, confidence_level, measurement_dat
         sigma.append(2 * coef * z * ((p_vec[i] * (1 - p_vec[i]) / num_meas_sub) ** 0.5))
     sigma = np.nan_to_num(sigma, nan=1)
     return sigma
-def Wilson_interval_bisection(coef, qubit_index, confidence_level, measurement_dataset, N):
+
+def Wilson_interval_bisection(coef:float, qubit_index:List[int], confidence_level:float, 
+                            measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
     ''' Given a qubit index (in order of 01234...),
         return the corresponding Wilson_interval for each expectation value.
         But here "bisection" means we add an additional coefficient,
@@ -305,7 +318,7 @@ def Wilson_interval_bisection(coef, qubit_index, confidence_level, measurement_d
     error_rate = 1 - confidence_level
     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
 
-    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset))
+    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset, N))
     p_vec = 0.5 * (1 + mean_vec)
 
     basis_list = generate_sub_PauliStrList(N, qubit_index)
@@ -315,7 +328,8 @@ def Wilson_interval_bisection(coef, qubit_index, confidence_level, measurement_d
         sigma.append(2*coef*z/(1+z*z/num_meas_sub)*math.sqrt((p_vec[i]*(1-p_vec[i]) + z*z/(4*num_meas_sub)) / num_meas_sub))
     sigma = np.nan_to_num(sigma, nan=1)
     return sigma
-def Bloch_vec(qiskit_state, qubit_index):
+
+def Bloch_vec(qiskit_state:DensityMatrix, qubit_index:List[int], N:int) -> List[float]:
     ''' Given a qiskit quantum state and the qubit index,
         return the Bloch vector of the reduced state according to the index
     '''
@@ -324,14 +338,16 @@ def Bloch_vec(qiskit_state, qubit_index):
         basis = basis[::-1]
         output.append(qiskit_state.expectation_value(oper=Pauli(basis), qargs=None))
     return output
-def qubit_swap(N, state_43210):
+
+def qubit_swap(N:int, state_43210:DensityMatrix) -> DensityMatrix:
     circSWAP = QuantumCircuit(N)
     for i in range(int(N / 2)):
         circSWAP.swap(i, N - 1 - i)
     U_SWAP = Operator(circSWAP)
     state_01234 = state_43210.evolve(U_SWAP)
     return state_01234
-def generate_random_dm(purity, N):
+
+def generate_random_dm(purity:float, N:int) -> np.ndarray:
     '''Generate a random density matrix with a certain purity
     '''
     qiskit_state = DensityMatrix(random_statevector(2 ** N))
@@ -347,25 +363,41 @@ def generate_random_dm(purity, N):
         density_matrix += Bloch_vector_noisy[i] * pauliToMatrix(PauliStrList[i])
     return 1 / (2 ** N) * np.array(density_matrix)
 
+
+#----------------------------------------------------------------------------------------------------------------------
 # Hamiltonian and plot
-def Hamiltonian_matrix(H):
+def Hamiltonian_matrix(H:List[str], model_type:str) -> List[str]:
     '''Given a list of Pauli string for each subsystem,
        output a list of their matrix representation.
     '''
     Hamiltonian_matrix = 0
     for i in range(len(H)):
         Hamiltonian_matrix = Hamiltonian_matrix + (pauliToMatrix(H[i]))
-    return Hamiltonian_matrix
-def Hamiltonian_global(H_local_list, N, M, K):
+    if model_type=='open':
+        return Hamiltonian_matrix
+    if model_type=='closed':
+        return -Hamiltonian_matrix
+
+def Hamiltonian_global(H_local_list:List[str], N:int, M:int, K:int, model_type:str) -> List[str]:
     '''Given the Hamiltonian of local subsystem (list of Pauli strings)
        return the Hamiltonian of global system (list of Pauli strings)
     '''
     H_global = []
-    for i in range(K):
+    if model_type=='open':
+        for i in range(K):
+            for h in H_local_list:
+                H_global.append(i * 'I' + h + (N - M - i) * 'I')
+    if model_type=='closed':
+        for i in range(K-1):
+            for h in H_local_list:
+                H_global.append(i * 'I' + h + (N - M - i) * 'I')
+        # Add the local Hamiltonian between the head and tail qubits (only works for M=2) 
         for h in H_local_list:
-            H_global.append(i * 'I' + h + (N - M - i) * 'I')
+            H_global.append(h[1] + (N - M)*'I' + h[0])
+
     return H_global
-def ground_state(H_matrix):
+
+def ground_state(H_matrix:np.ndarray) -> (float,np.ndarray):
     '''Given a matrix representation of a Hamiltonian,
        find the ground state energy, i.e. the minimum eigenvalue of the matrix,
        and the ground state density matrix
@@ -380,7 +412,8 @@ def ground_state(H_matrix):
     ground_state_dm = np.outer(ground_state_vec, np.conj(ground_state_vec))
 
     return ground_state_energy, ground_state_dm
-def N_meas_list_func(start, end, num):
+
+def N_meas_list_func(start:int, end:int, num:int) -> List[int]:
     '''Generate a list of number of measurement for the loop
     '''
     a = pow(end / start, 1 / (num - 1))
@@ -389,25 +422,27 @@ def N_meas_list_func(start, end, num):
         N_meas_list.append(math.floor(a * N_meas_list[-1]))
 
     return N_meas_list
-def gs_energy_estimate(measurement_dataset, confidence_level, H_global_list):
-    '''Given the Pauli decomposition of the Hamiltonian of interest and measurement dataset
-       return the expectaion value of the Hamiltonian (with confidence interval)
-    '''
-    E_min = 0
-    E_max = 0
-    error_rate = 1 - confidence_level
-    z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
-    
-    for pauli_basis_str in H_global_list:
-        exp, var = exp_var_calculator(measurement_dataset, pauli_basis_str)
-        num_meas_sub = num_meas_sub_calculator(measurement_dataset, pauli_basis_str)
-        p_value = 0.5 * (1 + exp)
-        sigma = z * ((p_value * (1 - p_value) / num_meas_sub) ** 0.5)
-        E_min = E_min + exp - 2*sigma
-        E_max = E_max + exp + 2*sigma
 
-    return E_min, E_max
-def gs_energy_estimate(measurement_dataset, confidence_level, H_global_list):
+# def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], confidence_level:float, H_global_list:List[str]) -> (float,float):
+#     '''Given the Pauli decomposition of the Hamiltonian of interest and measurement dataset
+#        return the expectaion value of the Hamiltonian (with confidence interval)
+#     '''
+#     E_min = 0
+#     E_max = 0
+#     error_rate = 1 - confidence_level
+#     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
+    
+#     for pauli_basis_str in H_global_list:
+#         exp, var = exp_var_calculator(measurement_dataset, pauli_basis_str)
+#         num_meas_sub = num_meas_sub_calculator(measurement_dataset, pauli_basis_str)
+#         p_value = 0.5 * (1 + exp)
+#         sigma = z * ((p_value * (1 - p_value) / num_meas_sub) ** 0.5)
+#         E_min = E_min + exp - 2*sigma
+#         E_max = E_max + exp + 2*sigma
+
+#     return E_min, E_max
+
+def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], confidence_level:float, H_global_list:List[str]) -> (float,float):
     '''Given the Pauli decomposition of the Hamiltonian of interest and measurement dataset
        return the expectaion value of the Hamiltonian (with confidence interval)
        This version is more rigorous.
@@ -427,7 +462,10 @@ def gs_energy_estimate(measurement_dataset, confidence_level, H_global_list):
     E_max = E_sum + 2.58*var_sum**0.5
 
     return E_min, E_max
-def lower_bound_with_SDP(H, N, M, K, P):
+
+def lower_bound_with_SDP(H:np.ndarray, 
+                         N:int, M:int, G:int, K:int, P:int, 
+                         PauliStrList_part:List[str], PauliStrList_Gbody:[List[str]]) -> float:
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
 
@@ -451,7 +489,7 @@ def lower_bound_with_SDP(H, N, M, K, P):
             dm_tilde_C1[k] = dm_tilde_C1[k] + cp.multiply(ep_C1[k, p], np.array(pauliToMatrix(PauliStrList_Gbody[p])))
 
             
-
+    # Define SDP constraints
     constraints_C0 = []
     for i in range(K):  # non-negative eigenvalues
         constraints_C0 += [dm_tilde[i] >> 1e-8]
@@ -485,20 +523,45 @@ def lower_bound_with_SDP(H, N, M, K, P):
 
     return energy_C01
 
+
+#----------------------------------------------------------------------------------------------------------------------
 # SDP problem variables and constraints
-def SDP_variables_C0(ep, measurement_dataset, N, M, K, P):
+def SDP_variables_C0(ep:cp.expressions.variable.Variable, 
+                     measurement_dataset:Dict[str,List[str]], 
+                     N:int, M:int, K:int, P:int, 
+                     PauliStrList_part:List[str],
+                     model_type:str) -> cp.atoms.affine.add_expr.AddExpression:
     '''Define SDP variables'''
     dm = []
-    for k in range(K):  # K: number of subsystems
-        index = list(range(k, k + M, 1))  # [k, k+1, ...]
-        dm.append(np.array(q_tomography_dm(index, measurement_dataset, N)))
-    dm_hat = dm
-    dm_tilde = dm
-    for k in range(K):
-        for p in range(P):
-            dm_tilde[k] = dm_tilde[k] + cp.multiply(ep[k, p], np.array(pauliToMatrix(PauliStrList_part[p])))
+
+    if model_type=='open':
+        for k in range(K):  # K: number of subsystems
+            index = list(range(k, k + M, 1))  # [k, k+1, ...]
+            dm.append(np.array(q_tomography_dm(index, measurement_dataset, N)))
+        dm_hat = dm
+        dm_tilde = dm
+        for k in range(K):
+            for p in range(P):
+                dm_tilde[k] = dm_tilde[k] + cp.multiply(ep[k, p], np.array(pauliToMatrix(PauliStrList_part[p])))
+    
+    if model_type=='closed':
+        for k in range(K):  # K: number of subsystems
+            index = [(k + i) % K for i in range(M)]  # [k, k+1, ...]
+            dm.append(np.array(q_tomography_dm(index, measurement_dataset, N)))
+        dm_hat = dm
+        dm_tilde = dm
+        for k in range(K):
+            for p in range(P):
+                dm_tilde[k] = dm_tilde[k] + cp.multiply(ep[k, p], np.array(pauliToMatrix(PauliStrList_part[p])))
+    
     return dm_tilde, dm_hat
-def constraints_C0(ep, coef, dm_tilde, measurement_dataset, N, M, K, P):
+
+def constraints_C0(ep:cp.expressions.variable.Variable, 
+                   coef:float, 
+                   dm_tilde: cp.atoms.affine.add_expr.AddExpression, 
+                   measurement_dataset:Dict[str,List[str]], 
+                   N:int, M:int, K:int, P:int,
+                   model_type:str) -> list:
     '''Define the constraints of the SDP for bisection method:
        1. non-negative eigenvalues
        2. physically compatitble
@@ -506,18 +569,39 @@ def constraints_C0(ep, coef, dm_tilde, measurement_dataset, N, M, K, P):
     constraints = []
     for i in range(K):  # non-negative eigenvalues
         constraints += [dm_tilde[i] >> 1e-8]
-    for i in range(K - 1):  # physically compatitble
-        constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
-                        cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+
+    if model_type=='open':
+        for i in range(K - 1):  # physically compatitble
+            constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+    if model_type=='closed':
+        for i in range(K - 1):  # physically compatitble
+            constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+        # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
+        constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=M -1) ==
+                            cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M - 1)]
 
     sigma = np.zeros((K, P))
-    for i in range(K):
-        index = list(range(i, i + M, 1))  # [i, i+1, ...]
-        sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
-    constraints += [ep >= -sigma, ep <= sigma]
+    if model_type=='open':
+        for i in range(K):
+            index = list(range(i, i + M, 1))  # [i, i+1, ...]
+            sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+        constraints += [ep >= -sigma, ep <= sigma]
+    if model_type=='closed':
+        for i in range(K):
+            index = [(i + j) % K for j in range(M)]  # [i, i+1, ...]
+            sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+        constraints += [ep >= -sigma, ep <= sigma]
 
     return constraints
-def constraints_interval(ep, coef, dm_tilde, measurement_dataset, N, M, K, P):
+
+
+def constraints_interval(ep:cp.expressions.variable.Variable,
+                        coef:float, 
+                        dm_tilde:cp.atoms.affine.add_expr.AddExpression, 
+                        measurement_dataset:Dict[str,List[str]], 
+                        N:int, M:int, K:int, P:int) -> list:
     '''Define the constraints of the SDP for bisection method:
        1. non-negative eigenvalues
     '''
@@ -529,14 +613,24 @@ def constraints_interval(ep, coef, dm_tilde, measurement_dataset, N, M, K, P):
     constraints += [ep >= -sigma, ep <= sigma]
 
     return constraints
-def SDP_variables_verify(ep_verify, measurement_dataset, N):
+
+def SDP_variables_verify(ep_verify:cp.expressions.variable.Variable, 
+                         measurement_dataset:Dict[str,List[str]], 
+                         N:int, 
+                         PauliStrList:List[str]) -> cp.atoms.affine.add_expr.AddExpression:
     '''Define the varibles of global verification problem
     '''
     dm_tilde_full = np.array(tensor([qeye(2)] * N)) / 2 ** N
     for i in range(4 ** N - 1):
         dm_tilde_full = dm_tilde_full + cp.multiply(ep_verify[i], np.array(pauliToMatrix(PauliStrList[i])))
     return dm_tilde_full
-def constraints_verify(ep_verify, coef, dm_tilde, dm_tilde_full, measurement_dataset, N, M, K):
+
+def constraints_verify(ep_verify:cp.expressions.variable.Variable, 
+                       coef:float, 
+                       dm_tilde:cp.atoms.affine.add_expr.AddExpression, 
+                       dm_tilde_full:cp.atoms.affine.add_expr.AddExpression, 
+                       measurement_dataset:Dict[str,List[str]], 
+                       N:int, M:int, K:int) -> list:
     '''Define the constraints of global verification problem:
        1. non-negative eigenvalues
        2. there exists a global state whose reduced states are the corresponding subsystems' states
@@ -558,13 +652,22 @@ def constraints_verify(ep_verify, coef, dm_tilde, dm_tilde_full, measurement_dat
     constraints_verify += [ep_verify >= -1, ep_verify <= 1]
 
     return constraints_verify
-def SDP_variables_C1(ep_C1, measurement_dataset, N, G):
+
+def SDP_variables_C1(ep_C1:cp.expressions.variable.Variable, 
+                     measurement_dataset:Dict[str,List[str]], 
+                     N:int, G:int, K:int,
+                     PauliStrList_Gbody:List[str],
+                     model_type:str) -> cp.atoms.affine.add_expr.AddExpression:
     '''Define SDP variables for C1
     '''
-    K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='open':
+        K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='closed':
+        K_3body = K # Number of 3-body subsystems
     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
     
     dm_tilde_C1 = []
+    
     for k in range(K_3body):
         dm_tilde_C1.append( np.array(tensor([qeye(2)] * G)) / 2 ** G )
 
@@ -573,24 +676,49 @@ def SDP_variables_C1(ep_C1, measurement_dataset, N, G):
             dm_tilde_C1[k] = dm_tilde_C1[k] + cp.multiply(ep_C1[k, p], np.array(pauliToMatrix(PauliStrList_Gbody[p])))
     
     return dm_tilde_C1
-def constraints_C1(ep_C1, coef, dm_tilde, dm_tilde_C1, measurement_dataset, N, M, G):
+
+def constraints_C1(ep_C1:cp.expressions.variable.Variable, 
+                   coef:float, 
+                   dm_tilde:cp.atoms.affine.add_expr.AddExpression, 
+                   dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                   measurement_dataset:Dict[str,List[str]], 
+                   N:int, M:int, G:int, K:int,
+                   model_type:str) -> list:
     '''Define the constraints of 3-body SDP problem (C1):
        1. non-negative eigenvalues
        2. there exists a 3-body global state whose reduced states are the corresponding subsystems' states
     '''
-    K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='open':
+        K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='closed':
+        K_3body = K # Number of 3-body subsystems
     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
 
     constraints_C1 = []
     for i in range(K_3body): 
         constraints_C1 += [dm_tilde_C1[i] >> 1e-8]  # non-negative eigenvalues
-
-    for i in range(K_3body):
-        constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
-        constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
+    
+    if model_type=='open':
+        for i in range(N-G+1):
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
+    if model_type=='closed':
+        for i in range(N-G+1):
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
+        if K>=4: # Add the globally compatitble constraints between the head and tail local systems (only works for M=2)
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            # (only works for M=2, G=3)
 
     return constraints_C1
-def SDP_variables_C2(ep_C2, measurement_dataset, N, G):
+
+def SDP_variables_C2(ep_C2:cp.expressions.variable.Variable, 
+                     measurement_dataset:Dict[str,List[str]], 
+                     N:int, G:int, 
+                     PauliStrList_Gbody:List[int]) -> cp.atoms.affine.add_expr.AddExpression:
     '''Define SDP variables for C2:
     '''
     K_3body = N-G+1 # Number of 3-body subsystems
@@ -607,7 +735,13 @@ def SDP_variables_C2(ep_C2, measurement_dataset, N, G):
             dm_tilde_C2[k] = dm_tilde_C2[k] + cp.multiply(ep_C2[k, p], np.array(pauliToMatrix(PauliStrList_Gbody[p])))
 
     return dm_tilde_C2
-def constraints_C2(ep_C2, coef, dm_tilde, dm_tilde_C2, measurement_dataset, N, M, G):
+
+def constraints_C2(ep_C2:cp.expressions.variable.Variable, 
+                   coef:float, 
+                   dm_tilde:cp.atoms.affine.add_expr.AddExpression, 
+                   dm_tilde_C2:cp.atoms.affine.add_expr.AddExpression, 
+                   measurement_dataset:Dict[str,List[str]], 
+                   N:int, M:int, G:int) -> list:
     '''Define the constraints of the SDP for bisection method:
        1. there exists a 3-body global state whose reduced states are the corresponding subsystems' states
        2. in the confidence interval
@@ -627,43 +761,51 @@ def constraints_C2(ep_C2, coef, dm_tilde, dm_tilde_C2, measurement_dataset, N, M
     constraints_C2 += [ep_C2 >= -sigma, ep_C2 <= sigma]
 
     return constraints_C2
-def constraints_CWM(ep, coef, dm_tilde_C1, measurement_dataset, N, M, G):
-    '''Define the constraints of weak monotonicity (CWM):
-       1. Weak monotonicity: For any state rho_ABC on systems ABC, we have: S(A|B) + S(A|C) >= 0
-       2. Here we only consider WM for each 3-body global state
+
+# def constraints_CWM(ep, coef, dm_tilde, dm_tilde_C1, measurement_dataset, N, M, G):
+#     '''Define the constraints of weak monotonicity (CWM):
+#        1. Weak monotonicity: For any state rho_ABC on systems ABC, we have: S(A|B) + S(A|C) >= 0
+#        2. Here we only consider WM for each 3-body global state
        
-       Comments: 
-       Unlike the classical conditional entropy, the conditional quantum entropy can be negative.
-    '''
-    K_3body = N-G+1 # Number of 3-body subsystems
-    P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
-
-    constraints_WM = []
-    for i in range(K_3body):
-        constraints_WM += [( cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1))+
-                           cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0)) ) 
-                           >= 
-                           ( cp.von_neumann_entr(cp.partial_trace(
-                                cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0), dims=[2]*(G-1), axis=0
-                           )) + 
-                           cp.von_neumann_entr(cp.partial_trace(
-                                cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1), dims=[2]*(G-1), axis=G-2
-                           )) )
-                           ]
-
+#        Comments: 
+#        Unlike the classical conditional entropy, the conditional quantum entropy can be negative.
+#     '''
+#     K_3body = N-G+1 # Number of 3-body subsystems
+#     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
 
 #     # constraints_WM = []
-#     # for i in range(K): # non-negative eigenvalues
-#     #     constraints_WM += [dm_tilde[i] >> 1e-8]  
 #     # for i in range(K_3body):
-#     #     constraints_WM += [cp.von_neumann_entr(dm_tilde[i])+cp.von_neumann_entr(dm_tilde[i+1]) >= 
-#     #                        cp.von_neumann_entr(cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=M-1))+
-#     #                        cp.von_neumann_entr(cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=0))]
+#     #     constraints_WM += [( cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1))+
+#     #                        cp.von_neumann_entr(cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0)) ) 
+#     #                        >= 
+#     #                        ( cp.von_neumann_entr(cp.partial_trace(
+#     #                             cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=0), dims=[2]*(G-1), axis=0
+#     #                        )) + 
+#     #                        cp.von_neumann_entr(cp.partial_trace(
+#     #                             cp.partial_trace(dm_tilde_C1[i], dims=[2]*G, axis=G-1), dims=[2]*(G-1), axis=G-2
+#     #                        )) )
+#     #                        ]
 
-    return constraints_WM
+#     constraints_WM = []
+#     for i in range(K): # non-negative eigenvalues
+#         constraints_WM += [dm_tilde[i] >> 1e-8]  
+#     for i in range(K_3body):
+#         constraints_WM += [cp.von_neumann_entr(dm_tilde[i])+cp.von_neumann_entr(dm_tilde[i+1]) >= 
+#                         cp.von_neumann_entr(cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=M-1))+
+#                         cp.von_neumann_entr(cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=0))]
 
+#     return constraints_WM
+
+
+#----------------------------------------------------------------------------------------------------------------------
 # Solve the SDP problems
-def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
+def SDP_solver_min(coef:float, 
+                   ep:cp.expressions.variable.Variable, ep_C1:cp.expressions.variable.Variable, 
+                   dm_tilde:cp.atoms.affine.add_expr.AddExpression, dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                   H:np.ndarray, 
+                   measurement_dataset:Dict[str,List[str]], 
+                   N:int, M:int, G:int, K:int, P:int,
+                   model_type:str) -> (float,float,float):
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
     
@@ -673,7 +815,7 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     dm_tilde_copyWM = dm_tilde
 
     # Solve SDP with conditions C0
-    constraints0 = constraints_C0(ep, coef, dm_tilde_copy0, measurement_dataset, N, M, K, P)
+    constraints0 = constraints_C0(ep, coef, dm_tilde_copy0, measurement_dataset, N, M, K, P, model_type)
     H_exp0 = 0
     for i in range(K):
         H_exp0 = H_exp0 + H @ dm_tilde_copy0[i]
@@ -692,7 +834,7 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
 
     
     # Solve SDP with conditions C1
-    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G)
+    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
     H_exp1 = 0
     for i in range(K):
         H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
@@ -711,8 +853,8 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
 
 
     # Solve SDP with conditions C1+C0
-    constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P)
-    constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copy01, dm_tilde_C1, measurement_dataset, N, M, G)
+    constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P, model_type)
+    constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copy01, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
     H_exp01 = 0
     for i in range(K):
         H_exp01 = H_exp01 + H @ dm_tilde_copy01[i]
@@ -733,7 +875,7 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     # # Solve SDP with conditions C1+C0+WM
     # constraints_0 = constraints_C0(ep, coef, dm_tilde_copyWM, measurement_dataset, N, M, K, P)
     # constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copyWM, dm_tilde_C1, measurement_dataset, N, M, G)
-    # constraints_WM = constraints_CWM(ep, coef, dm_tilde_C1, measurement_dataset, N, M, G)
+    # constraints_WM = constraints_CWM(ep, coef, dm_tilde_copyWM, dm_tilde_C1, measurement_dataset, N, M, G)
     # H_exp_WM = 0
     # for i in range(K):
     #     H_exp_WM = H_exp_WM + H @ dm_tilde_copyWM[i]
@@ -751,7 +893,14 @@ def SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     #     energy_WM = float('inf') 
 
     return energy_C0, energy_C1, energy_C01
-def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
+
+def SDP_solver_max(coef:float, 
+                   ep:cp.expressions.variable.Variable, ep_C1:cp.expressions.variable.Variable, 
+                   dm_tilde:cp.atoms.affine.add_expr.AddExpression, dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                   H:np.ndarray, 
+                   measurement_dataset:Dict[str,List[str]], 
+                   N:int, M:int, G:int, K:int, P:int,
+                   model_type:str) -> (float,float,float):
     '''Solve the SDP maximization problem with constraints C0 and C0+C1
     '''
     
@@ -760,7 +909,7 @@ def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
     dm_tilde_copy01 = dm_tilde
 
     # Solve SDP with conditions C0
-    constraints0 = constraints_C0(ep, coef, dm_tilde_copy0, measurement_dataset, N, M, K, P)
+    constraints0 = constraints_C0(ep, coef, dm_tilde_copy0, measurement_dataset, N, M, K, P, model_type)
     H_exp0 = 0
     for i in range(K):
         H_exp0 = H_exp0 + H @ dm_tilde_copy0[i]
@@ -779,7 +928,7 @@ def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
 
     
     # Solve SDP with conditions C1
-    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G)
+    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
     H_exp1 = 0
     for i in range(K):
         H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
@@ -798,8 +947,8 @@ def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
 
 
     # Solve SDP with conditions C1+C0
-    constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P)
-    constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copy01, dm_tilde_C1, measurement_dataset, N, M, G)
+    constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P, model_type)
+    constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copy01, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
     H_exp01 = 0
     for i in range(K):
         H_exp01 = H_exp01 + H @ dm_tilde_copy01[i]
@@ -817,7 +966,14 @@ def SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_datase
         energy_C01 = float('inf') 
 
     return energy_C0, energy_C1, energy_C01
-def biSection_search_min(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
+
+def biSection_search_min(higher_bound:float, threshold:float, 
+                         ep:cp.expressions.variable.Variable, ep_C1:cp.expressions.variable.Variable, 
+                         dm_tilde:cp.atoms.affine.add_expr.AddExpression, dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                         H:np.ndarray, 
+                         measurement_dataset:Dict[str,List[str]], 
+                         N:int, M:int, G:int, K:int, P:int,
+                         model_type:str) -> (float,float,float,float):
     '''Use bi-search method to find the minimum value of the relaxation such that there exists at least one solution in the search space,
        with an accuracy of 'threshold'
     '''
@@ -826,7 +982,7 @@ def biSection_search_min(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     high = higher_bound
     max_iter = 6
    
-    energy_C0, energy_C1, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+    energy_C0, energy_C1, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
     coef = high
     
     # If no solution exists within the initial higher bounds, increase the higher bound.
@@ -834,7 +990,7 @@ def biSection_search_min(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
         low = high
         high = 2*high
         max_iter = max_iter-1
-        energy_C0, energy_C1, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0, energy_C1, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
 
     # If still no solution after expanding the bounds, return an error message.
     if max_iter == 0:
@@ -843,7 +999,7 @@ def biSection_search_min(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     # Perform the binary search within the updated bounds.
     while abs(high - low) >= threshold:
         coef = low + abs(high - low) / 2
-        energy_C0_result, energy_C1_result, energy_C01_result = SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0_result, energy_C1_result, energy_C01_result = SDP_solver_min(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
         if (math.isinf(energy_C0_result) or math.isinf(energy_C1) or math.isinf(energy_C01_result)):
             low = coef
         else:
@@ -862,7 +1018,14 @@ def biSection_search_min(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     #         high = coef
 
     return energy_C0, energy_C1, energy_C01, coef
-def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
+
+def biSection_search_max(higher_bound:float, threshold:float, 
+                         ep:cp.expressions.variable.Variable, ep_C1:cp.expressions.variable.Variable, 
+                         dm_tilde:cp.atoms.affine.add_expr.AddExpression, dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                         H:np.ndarray, 
+                         measurement_dataset:Dict[str,List[str]], 
+                         N:int, M:int, G:int, K:int, P:int,
+                         model_type:str) -> (float,float,float,float):
     '''Use bi-search method to find the minimum value of the relaxation such that there exists at least one solution in the search space,
        with an accuracy of 'threshold'
     '''
@@ -871,7 +1034,7 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     high = higher_bound
     max_iter = 6
    
-    energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+    energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
     coef = high
     
     # If no solution exists within the initial higher bounds, increase the higher bound.
@@ -879,7 +1042,7 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
         low = high
         high = 2*high
         max_iter = max_iter-1
-        energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
 
     # If still no solution after expanding the bounds, return an error message.
     if max_iter == 0:
@@ -888,7 +1051,7 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     # Perform the binary search within the updated bounds.
     while abs(high - low) >= threshold:
         coef = low + abs(high - low) / 2
-        energy_C0_result, energy_C1_result, energy_C01_result = SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0_result, energy_C1_result, energy_C01_result = SDP_solver_max(coef, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
         if (math.isinf(energy_C0_result) or math.isinf(energy_C1) or math.isinf(energy_C01_result)):
             low = coef
         else:
@@ -907,7 +1070,14 @@ def biSection_search_max(higher_bound, threshold, ep, ep_C1, dm_tilde, dm_tilde_
     #         high = coef
 
     return energy_C0, energy_C1, energy_C01, coef
-def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P):
+
+def biSection_gs(coef_gs:float, threshold:float, 
+                 ep:cp.expressions.variable.Variable, ep_C1:cp.expressions.variable.Variable, 
+                 dm_tilde:cp.atoms.affine.add_expr.AddExpression, dm_tilde_C1:cp.atoms.affine.add_expr.AddExpression, 
+                 H:np.ndarray, 
+                 measurement_dataset:Dict[str,List[str]], 
+                 N:int, M:int, K:int, P:int,
+                 model_type:str) -> (float,float,float):
     '''Use bi-search method to find the approximation of ground state energy
     '''
 
@@ -915,7 +1085,7 @@ def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measur
     max_iter = 6
     high = coef_gs
    
-    energy_C0, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+    energy_C0, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P, model_type)
     coef = high
     
     # If no solution exists within the initial higher bounds, increase the higher bound.
@@ -923,7 +1093,7 @@ def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measur
         low = high
         high = 2*high
         max_iter = max_iter-1
-        energy_C0, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P)
+        energy_C0, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, K, P, model_type)
     energy_C0_gs = energy_C0 # Store the SDP solutions when the value of relaxation equals the higher bound (to approch the ground energy)
     energy_C01_gs = energy_C01 # Store the SDP solutions when the value of relaxation equals the higher bound (to approch the ground energy)
 
@@ -933,8 +1103,17 @@ def biSection_gs(coef_gs, threshold, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measur
 
     return energy_C0_gs, energy_C01_gs, coef
 
+
+#----------------------------------------------------------------------------------------------------------------------
 # Main functions
-def jordi_min(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
+def jordi_min(repetition:int, 
+              N_meas_list:List[int], 
+              higher_bound:float, threshold:float, 
+              N:int, M:int, G:int, K:int, P:int, 
+              model_type:str,
+              PauliStrList_part:List[str], PauliStrList_Gbody:List[str],
+              H_local_matrix:np.ndarray, 
+              H_global_list:List[str]) -> (List[float],List[float],List[float],List[float],List[float],List[float]):
     '''Solve the SDP minimization and maximization problem with the two different constraints for a list of number of measurement
     '''
 
@@ -947,22 +1126,28 @@ def jordi_min(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
     coef_min = []
 
     for N_meas in N_meas_list:
-        path = f'meas_dataset/N={N}/N{N}_Meas{N_meas}.npy'
+        path = f'meas_dataset/{model_type}/N={N}/N{N}_Meas{N_meas}.npy'
         data = np.load(path, allow_pickle=True)
         measurement_dataset = data[repetition]
         measurement_dataset = {key: value for key, value in measurement_dataset.items() if value} # For reducing the complexity
         N_meas_sub = N_meas * (3 ** (N - M))
 
         ep = cp.Variable((K, P))
-        ep_C1 = cp.Variable((N-G+1, 4**G-1))
-        dm_tilde, dm_hat = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
-        dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G)
+        if model_type=='open':
+            K_3body = N-G+1 # Number of 3-body subsystems
+        if model_type=='closed':
+            K_3body = K # Number of 3-body subsystems
+        ep_C1 = cp.Variable((K_3body, 4**G-1))
+
+        dm_tilde, dm_hat = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part, model_type)
+        dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G, K, PauliStrList_Gbody, model_type)
 
         # Energy with SDP - minimum
         E_min_C0_value, E_min_C1_value, E_min_C01_value, coef_min_value = biSection_search_min(higher_bound, threshold, 
                                                                                ep, ep_C1, dm_tilde, dm_tilde_C1, 
-                                                                               H_local, measurement_dataset, 
-                                                                               N, M, K, P
+                                                                               H_local_matrix, measurement_dataset, 
+                                                                               N, M, G, K, P,
+                                                                               model_type
                                                                                )
         E_min_C0.append(E_min_C0_value)
         E_min_C1.append(E_min_C1_value)
@@ -977,7 +1162,15 @@ def jordi_min(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
         print("Case N_meas =", N_meas, "finished")
 
     return E_min_C0, E_min_C1, E_min_C01, coef_min, E_min, E_max
-def jordi_max(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
+
+def jordi_max(repetition:int, 
+              N_meas_list:List[int], 
+              higher_bound:float, threshold:float, 
+              N:int, M:int, G:int, K:int, P:int, 
+              model_type:str,
+              PauliStrList_part:List[str], PauliStrList_Gbody:List[str],
+              H_local_matrix:np.ndarray, 
+              H_global_list:List[str]) -> (List[float],List[float],List[float],List[float]):
     '''Solve the SDP minimization and maximization problem with the two different constraints for a list of number of measurement
     '''
 
@@ -987,22 +1180,28 @@ def jordi_max(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
     coef_max = []
 
     for N_meas in N_meas_list:
-        path = f'meas_dataset/N={N}/N{N}_Meas{N_meas}.npy'
+        path = f'meas_dataset/{model_type}/N={N}/N{N}_Meas{N_meas}.npy'
         data = np.load(path, allow_pickle=True)
         measurement_dataset = data[repetition]
         measurement_dataset = {key: value for key, value in measurement_dataset.items() if value} # For reducing the complexity
         N_meas_sub = N_meas * (3 ** (N - M))
-
+        
         ep = cp.Variable((K, P))
-        ep_C1 = cp.Variable((N-G+1, 4**G-1))
-        dm_tilde, dm_hat = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
-        dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G)
+        if model_type=='open':
+            K_3body = N-G+1 # Number of 3-body subsystems
+        if model_type=='closed':
+            K_3body = K # Number of 3-body subsystems
+        ep_C1 = cp.Variable((K_3body, 4**G-1))
+ 
+        dm_tilde, dm_hat = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part, model_type)
+        dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G, K, PauliStrList_Gbody, model_type)
         
         # Energy with SDP - maximum
         E_max_C0_value, E_max_C1_value, E_max_C01_value, coef_max_value = biSection_search_max(higher_bound, threshold, 
                                                                                ep, ep_C1, dm_tilde, dm_tilde_C1, 
-                                                                               H_local, measurement_dataset, 
-                                                                               N, M, K, P
+                                                                               H_local_matrix, measurement_dataset, 
+                                                                               N, M, G, K, P,
+                                                                               model_type
                                                                                )
         E_max_C0.append(E_max_C0_value)
         E_max_C1.append(E_max_C1_value)
@@ -1012,7 +1211,15 @@ def jordi_max(repetition, N_meas_list, higher_bound, threshold, N, M, K, P):
         print("Case N_meas =", N_meas, "finished")
 
     return E_max_C0, E_max_C1, E_max_C01, coef_max
-def get_SDP_dataset_min(num_of_shot, N_meas_list, higher_bound, threshold, N, M, K, P):
+
+def get_SDP_dataset_min(num_of_shot:int, 
+                        N_meas_list:List[int], 
+                        higher_bound:float, threshold:float, 
+                        N:int, M:int, G:int, K:int, P:int, 
+                        model_type:str,
+                        PauliStrList_part:List[str], PauliStrList_Gbody:List[str],
+                        H_local_matrix:np.ndarray, 
+                        H_global_list:List[str]) -> dict:
     '''Get the dataset of the solution of the SDP problems
     '''
 
@@ -1029,7 +1236,10 @@ def get_SDP_dataset_min(num_of_shot, N_meas_list, higher_bound, threshold, N, M,
         E_min_C0, E_min_C1, E_min_C01, coef_min, E_min, E_max = jordi_min(
             repetition, 
             N_meas_list, higher_bound, threshold, 
-            N, M, K, P
+            N, M, G, K, P,
+            model_type,
+            PauliStrList_part, PauliStrList_Gbody,
+            H_local_matrix, H_global_list
         )
         data['E_min_C0'].append(E_min_C0)
         data['E_min_C1'].append(E_min_C1)
@@ -1038,7 +1248,15 @@ def get_SDP_dataset_min(num_of_shot, N_meas_list, higher_bound, threshold, N, M,
         data['E_min'].append(E_min)
         data['E_max'].append(E_max)
     return data
-def get_SDP_dataset_max(num_of_shot, N_meas_list, higher_bound, threshold, N, M, K, P):
+
+def get_SDP_dataset_max(num_of_shot:int, 
+                        N_meas_list:List[int], 
+                        higher_bound:float, threshold:float, 
+                        N:int, M:int, G:int, K:int, P:int, 
+                        model_type:str,
+                        PauliStrList_part:List[str], PauliStrList_Gbody:List[str],
+                        H_local_matrix:np.ndarray, 
+                        H_global_list:List[str]) -> dict:
     '''Get the dataset of the solution of the SDP problems
     '''
 
@@ -1052,14 +1270,19 @@ def get_SDP_dataset_max(num_of_shot, N_meas_list, higher_bound, threshold, N, M,
         E_max_C0, E_max_C1, E_max_C01, coef_max = jordi_max(
             repetition, 
             N_meas_list, higher_bound, threshold, 
-            N, M, K, P
+            N, M, G, K, P,
+            model_type,
+            PauliStrList_part, PauliStrList_Gbody,
+            H_local_matrix, H_global_list
         )
         data['E_max_C0'].append(E_max_C0)
         data['E_max_C1'].append(E_max_C1)
         data['E_max_C01'].append(E_max_C01)
         data['coef_max'].append(coef_max)
     return data
-def process_SDP_dataset(data, num_of_shot, num_data_point):
+
+def process_SDP_dataset(data:dict, num_of_shot:int, 
+                        num_data_point:int) -> (Dict[str,np.ndarray],Dict[str,np.ndarray]):
     '''Given the dataset of SDP problem results,
        return the mean value and standard deviation
     '''
@@ -1073,9 +1296,14 @@ def process_SDP_dataset(data, num_of_shot, num_data_point):
 
     return E_mean, E_std
 
+
+#----------------------------------------------------------------------------------------------------------------------
 # Moniter the time complexity with fixed G as N increases
 import time
-def time_cost_min_C01(H, measurement_dataset, N, M, K, P):
+def time_cost_min_C01(H:np.ndarray, 
+                      measurement_dataset:Dict[str,List[str]], 
+                      N:int, M:int, G:int, K:int, P:int, 
+                      PauliStrList_part:List[str]) -> (float,float):
     '''Solve the SDP using bi-section method
     '''
     ep = cp.Variable((K, P))
@@ -1084,7 +1312,7 @@ def time_cost_min_C01(H, measurement_dataset, N, M, K, P):
     coef = 1
 
     # Solve SDP with conditions C1+C0
-    dm_tilde01, dm_hat01 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
+    dm_tilde01, dm_hat01 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part)
     dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G)
     constraints0 = constraints_C0(ep, coef, dm_tilde01, measurement_dataset, N, M, K, P)
     constraints1 = constraints_C1(ep_C1, coef, dm_tilde01, dm_tilde_C1, measurement_dataset, N, M, G)
@@ -1104,7 +1332,11 @@ def time_cost_min_C01(H, measurement_dataset, N, M, K, P):
     energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
 
     return energy_C1, coef
-def time_cost_max_C01(H, measurement_dataset, N, M, K, P):
+
+def time_cost_max_C01(H:np.ndarray, 
+                      measurement_dataset:Dict[str,List[str]], 
+                      N:int, M:int, G:int, K:int, P:int, 
+                      PauliStrList_part:List[str]) -> (float,float):
     '''Solve the SDP using bi-section method
     '''
     ep = cp.Variable((K, P))
@@ -1113,7 +1345,7 @@ def time_cost_max_C01(H, measurement_dataset, N, M, K, P):
     coef = 1
 
     # Solve SDP with conditions C1+C0
-    dm_tilde01, dm_hat01 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
+    dm_tilde01, dm_hat01 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part)
     dm_tilde_C1 = SDP_variables_C1(ep_C1, measurement_dataset, N, G)
     constraints0 = constraints_C0(ep, coef, dm_tilde01, measurement_dataset, N, M, K, P)
     constraints1 = constraints_C1(ep_C1, coef, dm_tilde01, dm_tilde_C1, measurement_dataset, N, M, G)
@@ -1133,14 +1365,18 @@ def time_cost_max_C01(H, measurement_dataset, N, M, K, P):
     energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
 
     return energy_C1, coef
-def time_cost_min_C0(H, measurement_dataset, N, M, K, P):
+
+def time_cost_min_C0(H:np.ndarray, 
+                     measurement_dataset:Dict[str,List[str]], 
+                     N:int, M:int, G:int, K:int, P:int, 
+                     PauliStrList_part:List[str]) -> (float,float):
     '''Solve the SDP using bi-section method
     '''
     ep = cp.Variable((K, P))
     coef = 1
 
     # Solve SDP with conditions C0
-    dm_tilde0, dm_hat0 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
+    dm_tilde0, dm_hat0 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part)
     constraints0 = constraints_C0(ep, coef, dm_tilde0, measurement_dataset, N, M, K, P)
     
     H_exp0 = 0
@@ -1158,14 +1394,18 @@ def time_cost_min_C0(H, measurement_dataset, N, M, K, P):
     energy_C0 = prob_C0.solve(solver=cp.SCS, verbose=False)
 
     return energy_C0, coef
-def time_cost_max_C0(H, measurement_dataset, N, M, K, P):
+
+def time_cost_max_C0(H:np.ndarray, 
+                     measurement_dataset:Dict[str,List[str]], 
+                     N:int, M:int, G:int, K:int, P:int, 
+                     PauliStrList_part:List[str]) -> (float,float):
     '''Solve the SDP using bi-section method
     '''
     ep = cp.Variable((K, P))
     coef = 1
 
     # Solve SDP with conditions C0
-    dm_tilde0, dm_hat0 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P)
+    dm_tilde0, dm_hat0 = SDP_variables_C0(ep, measurement_dataset, N, M, K, P, PauliStrList_part)
     constraints0 = constraints_C0(ep, coef, dm_tilde0, measurement_dataset, N, M, K, P)
     
     H_exp0 = 0
@@ -1183,56 +1423,3 @@ def time_cost_max_C0(H, measurement_dataset, N, M, K, P):
     energy_C0 = prob_C0.solve(solver=cp.SCS, verbose=False)
 
     return energy_C0, coef
-
-
-N = 7 # Number of qubits of the entire system
-M = 2 # Number of qubits of subsystems
-G = 3 # Number of qubits of partial global system (C1)
-K = N-M+1 # Number of subsystems
-P = 4**M-1 # Number of Pauli basis for each subsystem
-
-PauliStrList = generate_PauliStrList(N)[1:]
-PauliStrList_part = generate_PauliStrList(M)[1:]
-PauliStrList_Gbody = generate_PauliStrList(G)[1:]
-
-H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
-H_global_list = Hamiltonian_global(H_local_list, N, M, K) # Pauli string representation of the Hamiltonian of the whole system
-H_local = np.array( Hamiltonian_matrix(H_local_list) ) # Matrix representation of the local Hamiltonian of subsystems
-H_global = np.array( Hamiltonian_matrix(H_global_list) ) # Matrix representation of the Hamiltonian of the whole system
-
-ground_state_energy, ground_state_dm = ground_state(H_global) 
-q_state = DensityMatrix(ground_state_dm) 
-lower_bound = lower_bound_with_SDP(H_local, N, M, K, P)
-
-num_data_point = 15 # number of N_meas that we select to run
-N_meas_list = N_meas_list_func(100, 100000, num_data_point) # A list of number of measurement performed in all basis
-num_of_shot = 100 # Number of repeatation of the experiment
-
-higher_bound = 0.1 # Starting trial value for the bi-search method
-threshold = 0.001 # Accuracy of the minimum relaxation value 
-data_min = get_SDP_dataset_min(num_of_shot=num_of_shot,
-                       N_meas_list=N_meas_list,
-                       higher_bound=higher_bound,
-                       threshold=threshold,
-                       N=N,
-                       M=M,
-                       K=K,
-                       P=P)
-data_max = get_SDP_dataset_max(num_of_shot=num_of_shot,
-                       N_meas_list=N_meas_list,
-                       higher_bound=higher_bound,
-                       threshold=threshold,
-                       N=N,
-                       M=M,
-                       K=K,
-                       P=P)
-
-E_mean_min, E_std_min = process_SDP_dataset(data_min, num_of_shot, num_data_point)
-E_mean_max, E_std_max = process_SDP_dataset(data_max, num_of_shot, num_data_point)
-
-name = 'data_N' + str(N) + '_threshold' + str(threshold)
-filename_min = '%s_min.npy' % name
-filename_max = '%s_max.npy' % name
-
-np.save(filename_min, data_min)
-np.save(filename_max, data_max)
