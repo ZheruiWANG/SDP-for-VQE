@@ -442,7 +442,10 @@ def N_meas_list_func(start:int, end:int, num:int) -> List[int]:
 
 #     return E_min, E_max
 
-def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], confidence_level:float, H_global_list:List[str]) -> (float,float):
+def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], 
+                       confidence_level:float, 
+                       H_global_list:List[str],
+                       model_type:str) -> (float,float):
     '''Given the Pauli decomposition of the Hamiltonian of interest and measurement dataset
        return the expectaion value of the Hamiltonian (with confidence interval)
        This version is more rigorous.
@@ -455,7 +458,10 @@ def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], confidence_level
     for pauli_basis_str in H_global_list:
         exp, var = exp_var_calculator(measurement_dataset, pauli_basis_str)
         num_meas_sub = num_meas_sub_calculator(measurement_dataset, pauli_basis_str)
-        E_sum = E_sum + exp
+        if model_type == 'open':
+            E_sum = E_sum + exp
+        if model_type == 'closed':
+            E_sum = E_sum - exp
         var_sum = var_sum + var/num_meas_sub
 
     E_min = E_sum - 2.58*var_sum**0.5
@@ -465,22 +471,29 @@ def gs_energy_estimate(measurement_dataset:Dict[str,List[str]], confidence_level
 
 def lower_bound_with_SDP(H:np.ndarray, 
                          N:int, M:int, G:int, K:int, P:int, 
-                         PauliStrList_part:List[str], PauliStrList_Gbody:[List[str]]) -> float:
+                         PauliStrList_part:List[str], PauliStrList_Gbody:[List[str]],
+                         model_type:str) -> float:
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
 
-    K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='open':
+        K_3body = N-G+1 # Number of 3-body subsystems
+    if model_type=='closed':
+        K_3body = K # Number of 3-body subsystems
     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
     ep = cp.Variable((K, P))
-    ep_C1 = cp.Variable((N-G+1, 4**G-1))
+    ep_C1 = cp.Variable((K_3body, 4**G-1))
 
-    # Define SDP variables
+
+    # Define SDP variables---------------------------------------------------------------------------------------------
+    # Physical: dm_tilde
     dm_tilde = []
     for k in range(K):
         dm_tilde.append( np.array(tensor([qeye(2)] * M)) / 2 **M )
     for k in range(K):
         for p in range(P):
             dm_tilde[k] = dm_tilde[k] + cp.multiply(ep[k, p], np.array(pauliToMatrix(PauliStrList_part[p])))
+    # Global: dm_tilde_C1
     dm_tilde_C1 = []
     for k in range(K_3body):
         dm_tilde_C1.append( np.array(tensor([qeye(2)] * G)) / 2 ** G )
@@ -489,24 +502,46 @@ def lower_bound_with_SDP(H:np.ndarray,
             dm_tilde_C1[k] = dm_tilde_C1[k] + cp.multiply(ep_C1[k, p], np.array(pauliToMatrix(PauliStrList_Gbody[p])))
 
             
-    # Define SDP constraints
+    # Define SDP constraints---------------------------------------------------------------------------------------------
+    # Physical constraints
     constraints_C0 = []
     for i in range(K):  # non-negative eigenvalues
         constraints_C0 += [dm_tilde[i] >> 1e-8]
-    for i in range(K - 1):  # physically compatitble
-        constraints_C0 += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
-                        cp.partial_trace(dm_tilde[i + 1], dims=[2] * M, axis=M - 1)]
-
+    if model_type=='open':
+        for i in range(K - 1):  # physically compatitble
+            constraints_C0 += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+    if model_type=='closed':
+        for i in range(K - 2):  # physically compatitble
+            constraints_C0 += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+        # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
+        constraints_C0 += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=0)]
+        constraints_C0 += [cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M-1) ==
+                            cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M-1)]
+    
+    # Global constraints
     constraints_C1 = []
     for i in range(K_3body): 
         constraints_C1 += [dm_tilde_C1[i] >> 1e-8]  # non-negative eigenvalues
+    if model_type=='open':
+        for i in range(N-G+1):
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
+    if model_type=='closed':
+        for i in range(N-G+1):
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
+        if K>=4: # Add the globally compatitble constraints between the head and tail local systems (only works for M=2)
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            # (only works for M=2, G=3)
 
-    for i in range(K_3body):
-        constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
-        constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
 
-
-    # Solve SDP with conditions C1+C0
+    # Solve SDP with conditions C1+C0---------------------------------------------------------------------------------------------
     H_exp01 = 0
     for i in range(K):
         H_exp01 = H_exp01 + H @ dm_tilde[i]
@@ -574,13 +609,23 @@ def constraints_C0(ep:cp.expressions.variable.Variable,
         for i in range(K - 1):  # physically compatitble
             constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
                             cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+    # if model_type=='closed':
+    #     for i in range(K - 1):  # physically compatitble
+    #         constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+    #                         cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+    #     # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
+    #     constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=M -1) ==
+    #                         cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M - 1)]
+        
     if model_type=='closed':
-        for i in range(K - 1):  # physically compatitble
+        for i in range(K - 2):  # physically compatitble
             constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
                             cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
         # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
-        constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=M -1) ==
-                            cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M - 1)]
+        constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=0)]
+        constraints += [cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M-1) ==
+                            cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M-1)]
 
     sigma = np.zeros((K, P))
     if model_type=='open':
@@ -712,6 +757,7 @@ def constraints_C1(ep_C1:cp.expressions.variable.Variable,
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
             # (only works for M=2, G=3)
+    
 
     return constraints_C1
 
@@ -831,26 +877,25 @@ def SDP_solver_min(coef:float,
     energy_C0 = prob_C0.solve(solver=cp.SCS, verbose=False)
     if prob_C0.status != cp.OPTIMAL:
         energy_C0 = float('inf') 
-
     
-    # Solve SDP with conditions C1
-    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
-    H_exp1 = 0
-    for i in range(K):
-        H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
-    prob_C1 = cp.Problem(
-        cp.Minimize(
-            cp.real(
-                cp.trace(
-                    H_exp1
-                )
-            )
-        ), constraints1
-    )
-    energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
-    if prob_C1.status != cp.OPTIMAL:
-        energy_C1 = float('inf')
-
+    # # Solve SDP with conditions C1
+    # constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
+    # H_exp1 = 0
+    # for i in range(K):
+    #     H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
+    # prob_C1 = cp.Problem(
+    #     cp.Minimize(
+    #         cp.real(
+    #             cp.trace(
+    #                 H_exp1
+    #             )
+    #         )
+    #     ), constraints1
+    # )
+    # energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
+    # if prob_C1.status != cp.OPTIMAL:
+    #     energy_C1 = float('inf')
+    energy_C1 = 0
 
     # Solve SDP with conditions C1+C0
     constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P, model_type)
@@ -871,26 +916,6 @@ def SDP_solver_min(coef:float,
     if prob_C01.status != cp.OPTIMAL:
         energy_C01 = float('inf') 
 
-
-    # # Solve SDP with conditions C1+C0+WM
-    # constraints_0 = constraints_C0(ep, coef, dm_tilde_copyWM, measurement_dataset, N, M, K, P)
-    # constraints_1 = constraints_C1(ep_C1, coef, dm_tilde_copyWM, dm_tilde_C1, measurement_dataset, N, M, G)
-    # constraints_WM = constraints_CWM(ep, coef, dm_tilde_copyWM, dm_tilde_C1, measurement_dataset, N, M, G)
-    # H_exp_WM = 0
-    # for i in range(K):
-    #     H_exp_WM = H_exp_WM + H @ dm_tilde_copyWM[i]
-    # prob_WM = cp.Problem(
-    #     cp.Minimize(
-    #         cp.real(
-    #             cp.trace(
-    #                 H_exp_WM
-    #             )
-    #         )
-    #     ), constraints_0 + constraints_1 + constraints_WM
-    # )
-    # energy_WM = prob_WM.solve(solver=cp.MOSEK, verbose=False)
-    # if prob_WM.status != cp.OPTIMAL:
-    #     energy_WM = float('inf') 
 
     return energy_C0, energy_C1, energy_C01
 
@@ -926,25 +951,24 @@ def SDP_solver_max(coef:float,
     if prob_C0.status != cp.OPTIMAL:
         energy_C0 = float('inf') 
 
-    
     # Solve SDP with conditions C1
-    constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
-    H_exp1 = 0
-    for i in range(K):
-        H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
-    prob_C1 = cp.Problem(
-        cp.Maximize(
-            cp.real(
-                cp.trace(
-                    H_exp1
-                )
-            )
-        ), constraints1
-    )
-    energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
-    if prob_C1.status != cp.OPTIMAL:
-        energy_C1 = float('inf')
-
+    # constraints1 = constraints_C1(ep_C1, coef, dm_tilde_copy1, dm_tilde_C1, measurement_dataset, N, M, G, K, model_type)
+    # H_exp1 = 0
+    # for i in range(K):
+    #     H_exp1 = H_exp1 + H @ dm_tilde_copy1[i]
+    # prob_C1 = cp.Problem(
+    #     cp.Maximize(
+    #         cp.real(
+    #             cp.trace(
+    #                 H_exp1
+    #             )
+    #         )
+    #     ), constraints1
+    # )
+    # energy_C1 = prob_C1.solve(solver=cp.SCS, verbose=False)
+    # if prob_C1.status != cp.OPTIMAL:
+    #     energy_C1 = float('inf')
+    energy_C1 = 0
 
     # Solve SDP with conditions C1+C0
     constraints_0 = constraints_C0(ep, coef, dm_tilde_copy01, measurement_dataset, N, M, K, P, model_type)
@@ -965,6 +989,7 @@ def SDP_solver_max(coef:float,
     if prob_C01.status != cp.OPTIMAL:
         energy_C01 = float('inf') 
 
+
     return energy_C0, energy_C1, energy_C01
 
 def biSection_search_min(higher_bound:float, threshold:float, 
@@ -980,7 +1005,7 @@ def biSection_search_min(higher_bound:float, threshold:float,
 
     low = 0
     high = higher_bound
-    max_iter = 6
+    max_iter = 10
    
     energy_C0, energy_C1, energy_C01 = SDP_solver_min(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
     coef = high
@@ -1032,7 +1057,7 @@ def biSection_search_max(higher_bound:float, threshold:float,
 
     low = 0
     high = higher_bound
-    max_iter = 6
+    max_iter = 10
    
     energy_C0, energy_C1, energy_C01 = SDP_solver_max(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
     coef = high
@@ -1155,7 +1180,7 @@ def jordi_min(repetition:int,
         coef_min.append(coef_min_value)
         
         # Average energy calculated from measurements
-        E_min_and_max = gs_energy_estimate(measurement_dataset, 0.99, H_global_list)
+        E_min_and_max = gs_energy_estimate(measurement_dataset, 0.99, H_global_list, model_type)
         E_min.append(E_min_and_max[0])
         E_max.append(E_min_and_max[1])
 
