@@ -1,3 +1,3 @@
-num_data_point = 15
+  num_data_point = 15
 N_meas_list = N_meas_list_func(100, 100000, num_data_point)
 num_of_shot = 100
