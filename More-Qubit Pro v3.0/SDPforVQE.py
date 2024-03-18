@@ -573,7 +573,7 @@ def SDP_variables_C0(ep:cp.expressions.variable.Variable,
         for k in range(K):  # K: number of subsystems
             index = list(range(k, k + M, 1))  # [k, k+1, ...]
             dm.append(np.array(q_tomography_dm(index, measurement_dataset, N)))
-        dm_hat = dm
+        dm_hat = dm.copy()
         dm_tilde = dm
         for k in range(K):
             for p in range(P):
@@ -583,7 +583,7 @@ def SDP_variables_C0(ep:cp.expressions.variable.Variable,
         for k in range(K):  # K: number of subsystems
             index = [(k + i) % K for i in range(M)]  # [k, k+1, ...]
             dm.append(np.array(q_tomography_dm(index, measurement_dataset, N)))
-        dm_hat = dm
+        dm_hat = dm.copy()
         dm_tilde = dm
         for k in range(K):
             for p in range(P):
