@@ -767,26 +767,26 @@ N_opt = 10 # Number of iterations of cooling
 num_of_shots = 25 # Number of experiments we do 
 
 data = []
-for N in [3, 4, 5, 6]: # Number of qubits of the entire system
-    for N_meas in [500, 1000, 2000, 4000, 8000, 16000]: # Number of measurements in all basis each loop
-
-        avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
-                                                                                                                                             N, M, G, H_local_list, model_type)
-        for i in list(range(N_opt)):
-            # Save data to Panda DataFrame
-            df = {
-                'N_opt': i+1,
-                'avg_expH': avg_expH[i],
-                'std_expH': std_expH[i],
-                'avg_expH_enhanced': avg_expH_enhanced[i],
-                'std_expH_enhanced': std_expH_enhanced[i],
-                'avg_expH_enhanced_SDPvalue': avg_expH_enhanced_SDPvalue[i],
-                'std_expH_enhanced_SDPvalue': std_expH_enhanced_SDPvalue[i],
-                'N': N,
-                'N_meas': N_meas,
-                'Initial_state': initial_guess
-            }
-            data.append(df)
+for N in [3, 4, 5, 6, 7]: # Number of qubits of the entire system
+    for N_meas in [250, 500, 1000, 2000, 4000, 8000]: # Number of measurements in all basis each loop
+        for initial_guess in ['HF', '++']:
+            avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
+                                                                                                                                                N, M, G, H_local_list, model_type)
+            for i in list(range(N_opt)):
+                # Save data to Panda DataFrame
+                df = {
+                    'N_opt': i+1,
+                    'avg_expH': avg_expH[i],
+                    'std_expH': std_expH[i],
+                    'avg_expH_enhanced': avg_expH_enhanced[i],
+                    'std_expH_enhanced': std_expH_enhanced[i],
+                    'avg_expH_enhanced_SDPvalue': avg_expH_enhanced_SDPvalue[i],
+                    'std_expH_enhanced_SDPvalue': std_expH_enhanced_SDPvalue[i],
+                    'N': N,
+                    'N_meas': N_meas,
+                    'Initial_state': initial_guess
+                }
+                data.append(df)
 
 df = pd.DataFrame(data)
 df.to_csv('experiment_data.csv', index=False) # Save the DataFrame to a CSV file
