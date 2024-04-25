@@ -561,10 +561,14 @@ def algorithmic_cooling(input_state, N_opt, N_meas,
                         SDP_tag, num_of_sweep):
     '''Do the algorithmic cooling
     '''
+    # Get the energy of the initial input state
+    E = 0
+    for pauli_basis in H_global_list:
+        E = E + input_state.expectation_value(oper=Pauli(pauli_basis), qargs=None)
 
     # Define lists for saving the results
-    expH_dm_iter = []
-    expH_dm_SDPvalue_iter = []
+    expH_dm_iter = [E]
+    expH_dm_SDPvalue_iter = [E]
 
     # Start the optimization
     for i in tqdm(range(N_opt)):
@@ -642,7 +646,7 @@ def get_figure(avg_expH, std_expH,
     '''
     
     plt.figure()
-    iteration_list = list(range(1,N_opt+1))
+    iteration_list = list(range(N_opt+1))
     
     # Plot the theoretical ground state energy
     plt.axhline(y = ground_state_energy, color='r', linestyle='-', linewidth=1.25, label='GS energy')
@@ -691,7 +695,7 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
     H_global_list = Hamiltonian_global(H_local_list, N, M, K, model_type) # Pauli string representation of the Hamiltonian of the whole system
     H_local_matrix = np.array( Hamiltonian_matrix(H_local_list, model_type) ) # Matrix representation of the local Hamiltonian of subsystems
     H_global_matrix = np.array( Hamiltonian_matrix(H_global_list, model_type) ) # Matrix representation of the Hamiltonian of the whole system
-    higher_bound = 2 # Starting trial value for the bi-search method
+    higher_bound = 1 # Starting trial value for the bi-search method
     threshold = 1 # Accuracy of the minimum relaxation value 
     ground_state_energy, ground_state_dm = ground_state(H_global_matrix) 
 
@@ -757,25 +761,25 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
     return avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy
         
 
+
 H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
 model_type = 'open'
 M = 2 # Number of qubits of subsystems
 G = 3 # Number of qubits of partial global system (C1)
 
-initial_guess = 'HF'
 N_opt = 10 # Number of iterations of cooling
-num_of_shots = 25 # Number of experiments we do 
+num_of_shots = 50 # Number of experiments we do 
 
 data = []
-for N in [3, 4, 5, 6, 7]: # Number of qubits of the entire system
-    for N_meas in [250, 500, 1000, 2000, 4000, 8000]: # Number of measurements in all basis each loop
+for N in [3,4,5,6,7,8]: # Number of qubits of the entire system
+    for N_meas in [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000]: # Number of measurements in all basis each loop
         for initial_guess in ['HF', '++']:
             avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
                                                                                                                                                 N, M, G, H_local_list, model_type)
-            for i in list(range(N_opt)):
+            for i in list(range(N_opt+1)):
                 # Save data to Panda DataFrame
                 df = {
-                    'N_opt': i+1,
+                    'N_opt': i,
                     'avg_expH': avg_expH[i],
                     'std_expH': std_expH[i],
                     'avg_expH_enhanced': avg_expH_enhanced[i],
