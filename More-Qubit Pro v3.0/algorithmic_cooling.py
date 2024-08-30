@@ -767,7 +767,7 @@ model_type = 'open'
 M = 2 # Number of qubits of subsystems
 G = 3 # Number of qubits of partial global system (C1)
 
-N_opt = 10 # Number of iterations of cooling
+N_opt = 15 # Number of iterations of cooling
 num_of_shots = 50 # Number of experiments we do 
 
 data = []

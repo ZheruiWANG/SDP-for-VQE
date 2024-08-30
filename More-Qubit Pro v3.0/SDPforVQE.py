@@ -293,7 +293,9 @@ def Wald_interval_bisection(coef:float, qubit_index:List[int], confidence_level:
     ''' Given a qubit index (in order of 01234...),
         return the corresponding Wald_interval for each expectation value.
         But here "bisection" means we add an additional coefficient,
-        so that we can use bisection method to find the solution of the SDP within a certain domain defined by a threshold
+        so that we can use bisection method to find the solution of the SDP within a certain domain defined by a threshold.
+
+        Wald method: CI is z*\sqrt(p(1-p)/n)
     '''
     error_rate = 1 - confidence_level
     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
@@ -304,30 +306,36 @@ def Wald_interval_bisection(coef:float, qubit_index:List[int], confidence_level:
     sigma = []
     for i in range(len(basis_list)):
         num_meas_sub = num_meas_sub_calculator(measurement_dataset, basis_list[i])
-        sigma.append(2 * coef * z * ((p_vec[i] * (1 - p_vec[i]) / num_meas_sub) ** 0.5))
-    sigma = np.nan_to_num(sigma, nan=1)
-    return sigma
+        variance = p_vec[i] * (1 - p_vec[i]) # variance should be p(1-p)/n, here I don't divide for simplicity
+        if num_meas_sub == 0:
+            sigma.append(float(1*coef))
+        if num_meas_sub != 0:
+            if variance == 0:
+                sigma.append(2 * coef * z * ((0.25/num_meas_sub)**0.5)) # since p(1-p) <= 0.25
+            else:
+                sigma.append(2 * coef * z * (variance/num_meas_sub)**0.5)
+    return sigma, mean_vec
 
-def Wilson_interval_bisection(coef:float, qubit_index:List[int], confidence_level:float, 
-                            measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
-    ''' Given a qubit index (in order of 01234...),
-        return the corresponding Wilson_interval for each expectation value.
-        But here "bisection" means we add an additional coefficient,
-        so that we can use bisection method to find the solution of the SDP within a certain domain defined by a threshold
-    '''
-    error_rate = 1 - confidence_level
-    z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
+# def Wilson_interval_bisection(coef:float, qubit_index:List[int], confidence_level:float, 
+#                             measurement_dataset:Dict[str,List[str]], N:int) -> List[float]:
+#     ''' Given a qubit index (in order of 01234...),
+#         return the corresponding Wilson_interval for each expectation value.
+#         But here "bisection" means we add an additional coefficient,
+#         so that we can use bisection method to find the solution of the SDP within a certain domain defined by a threshold
+#     '''
+#     error_rate = 1 - confidence_level
+#     z = norm.ppf(1 - error_rate / 2)  # Quantile of the input confidence level for binomial distribution
 
-    mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset, N))
-    p_vec = 0.5 * (1 + mean_vec)
+#     mean_vec = np.array(q_tomography_vec(qubit_index, measurement_dataset, N))
+#     p_vec = 0.5 * (1 + mean_vec)
 
-    basis_list = generate_sub_PauliStrList(N, qubit_index)
-    sigma = []
-    for i in range(len(basis_list)):
-        num_meas_sub = num_meas_sub_calculator(measurement_dataset, basis_list[i])
-        sigma.append(2*coef*z/(1+z*z/num_meas_sub)*math.sqrt((p_vec[i]*(1-p_vec[i]) + z*z/(4*num_meas_sub)) / num_meas_sub))
-    sigma = np.nan_to_num(sigma, nan=1)
-    return sigma
+#     basis_list = generate_sub_PauliStrList(N, qubit_index)
+#     sigma = []
+#     for i in range(len(basis_list)):
+#         num_meas_sub = num_meas_sub_calculator(measurement_dataset, basis_list[i])
+#         sigma.append(2*coef*z/(1+z*z/num_meas_sub)*math.sqrt((p_vec[i]*(1-p_vec[i]) + z*z/(4*num_meas_sub)) / num_meas_sub))
+#     sigma = np.nan_to_num(sigma, nan=1)
+#     return sigma
 
 def Bloch_vec(qiskit_state:DensityMatrix, qubit_index:List[int], N:int) -> List[float]:
     ''' Given a qiskit quantum state and the qubit index,
@@ -628,16 +636,22 @@ def constraints_C0(ep:cp.expressions.variable.Variable,
                             cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M-1)]
 
     sigma = np.zeros((K, P))
+    mean_vec = np.zeros((K, P))
     if model_type=='open':
         for i in range(K):
             index = list(range(i, i + M, 1))  # [i, i+1, ...]
-            sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+            sigma[i], mean_vec[i] = Wald_interval_bisection(coef, index, 0.95, measurement_dataset, N)
         constraints += [ep >= -sigma, ep <= sigma]
+        constraints += [ep+mean_vec >= -1, ep+mean_vec <= 1]
+        # print(mean_vec+sigma)
+        # print(mean_vec-sigma)
     if model_type=='closed':
         for i in range(K):
             index = [(i + j) % K for j in range(M)]  # [i, i+1, ...]
-            sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+            sigma[i], mean_vec[i] = Wald_interval_bisection(coef, index, 0.95, measurement_dataset, N)
         constraints += [ep >= -sigma, ep <= sigma]
+        constraints += [ep+mean_vec >= -1, ep+mean_vec <= 1]
+  
 
     return constraints
 
@@ -654,7 +668,7 @@ def constraints_interval(ep:cp.expressions.variable.Variable,
     sigma = np.zeros((K, P))
     for i in range(K):
         index = list(range(i, i + M, 1))  # [i, i+1, ...]
-        sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+        sigma[i] = Wald_interval_bisection(coef, index, 0.95, measurement_dataset, N)
     constraints += [ep >= -sigma, ep <= sigma]
 
     return constraints
@@ -803,7 +817,7 @@ def constraints_C2(ep_C2:cp.expressions.variable.Variable,
     sigma = np.zeros((K_3body, P_3body))
     for i in range(K_3body):
         index = list(range(i, i+G, 1))  # [i, i+1, ...]
-        sigma[i] = Wilson_interval_bisection(coef, index, 0.95, measurement_dataset, N)
+        sigma[i] = Wald_interval_bisection(coef, index, 0.95, measurement_dataset, N)
     constraints_C2 += [ep_C2 >= -sigma, ep_C2 <= sigma]
 
     return constraints_C2
@@ -925,7 +939,7 @@ def SDP_solver_max(coef:float,
                    H:np.ndarray, 
                    measurement_dataset:Dict[str,List[str]], 
                    N:int, M:int, G:int, K:int, P:int,
-                   model_type:str) -> (float,float,float):
+                   model_type:str) -> (float, float, float):
     '''Solve the SDP maximization problem with constraints C0 and C0+C1
     '''
     
