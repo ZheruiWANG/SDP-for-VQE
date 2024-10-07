@@ -643,8 +643,6 @@ def constraints_C0(ep:cp.expressions.variable.Variable,
             sigma[i], mean_vec[i] = Wald_interval_bisection(coef, index, 0.95, measurement_dataset, N)
         constraints += [ep >= -sigma, ep <= sigma]
         constraints += [ep+mean_vec >= -1, ep+mean_vec <= 1]
-        # print(mean_vec+sigma)
-        # print(mean_vec-sigma)
     if model_type=='closed':
         for i in range(K):
             index = [(i + j) % K for j in range(M)]  # [i, i+1, ...]
