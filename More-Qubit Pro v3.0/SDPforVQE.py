@@ -617,23 +617,23 @@ def constraints_C0(ep:cp.expressions.variable.Variable,
         for i in range(K - 1):  # physically compatitble
             constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
                             cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
-    # if model_type=='closed':
-    #     for i in range(K - 1):  # physically compatitble
-    #         constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
-    #                         cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
-    #     # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
-    #     constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=M -1) ==
-    #                         cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M - 1)]
-        
     if model_type=='closed':
-        for i in range(K - 2):  # physically compatitble
+        for i in range(K - 1):  # physically compatitble
             constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
                             cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
         # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
-        constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=0) ==
-                            cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=0)]
-        constraints += [cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M-1) ==
-                            cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M-1)]
+        constraints += [cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=0) ==
+                            cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M - 1)]
+        
+    # if model_type=='closed':
+    #     for i in range(K - 2):  # physically compatitble
+    #         constraints += [cp.partial_trace(dm_tilde[i], dims=[2] * M, axis=0) ==
+    #                         cp.partial_trace(dm_tilde[i+1], dims=[2] * M, axis=M - 1)]
+    #     # Add the physically compatitble constraints between the head and tail local systems (only works for M=2)
+    #     constraints += [cp.partial_trace(dm_tilde[K-2], dims=[2] * M, axis=0) ==
+    #                         cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=0)]
+    #     constraints += [cp.partial_trace(dm_tilde[K-1], dims=[2] * M, axis=M-1) ==
+    #                         cp.partial_trace(dm_tilde[0], dims=[2] * M, axis=M-1)]
 
     sigma = np.zeros((K, P))
     mean_vec = np.zeros((K, P))
@@ -760,15 +760,19 @@ def constraints_C1(ep_C1:cp.expressions.variable.Variable,
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
     if model_type=='closed':
-        for i in range(N-G+1):
+        for i in range(N-G+1): # the first N-2 sub-global system
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
         if K>=4: # Add the globally compatitble constraints between the head and tail local systems (only works for M=2)
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
-            # (only works for M=2, G=3)
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-1]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[4,2], axis=1) == dm_tilde[K-2]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=0) == dm_tilde[0]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=G-1) == dm_tilde[K-1]]
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+            # # (only works for M=2, G=3)
     
 
     return constraints_C1
