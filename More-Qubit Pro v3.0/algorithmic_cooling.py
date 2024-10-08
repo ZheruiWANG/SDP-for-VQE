@@ -18,7 +18,6 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector, DensityMatrix, Operator, Pauli, partial_trace, state_fidelity, random_density_matrix, random_statevector
 from qiskit.visualization import plot_histogram, plot_state_city, plot_bloch_multivector, plot_state_paulivec, plot_state_hinton, plot_state_qsphere
 from qiskit.tools.monitor import job_monitor
-import os
 
 from SDPforVQE import *
 from SDPforVQE import *
@@ -101,21 +100,33 @@ def qiskit_statevec_map(statevec_qiskit, N):
 
     return Statevector(statevec_normal)
 
-def available_h_set(N, M, K):
+def available_h_set(N, M, K, model_type):
     '''Get all the accessible operations according to the layout of the Hamiltonian of insterest'''
 
     h_set = set({})
 
-    for i in range(N):
-        h_set.add('I'*i + 'X' + 'I'*(N-i-1))
-        h_set.add('I'*i + 'Y' + 'I'*(N-i-1))
-        h_set.add('I'*i + 'Z' + 'I'*(N-i-1))
-    
-    PauliStrList_part = generate_PauliStrList(M)[1:]
-    for k in range(K):
-        for basis in PauliStrList_part:
-            h_set.add('I'*k + basis + 'I'*(N-k-M))
+    if model_type == 'open':
+        for i in range(N):
+            h_set.add('I'*i + 'X' + 'I'*(N-i-1))
+            h_set.add('I'*i + 'Y' + 'I'*(N-i-1))
+            h_set.add('I'*i + 'Z' + 'I'*(N-i-1))
+        PauliStrList_part = generate_PauliStrList(M)[1:]
+        for k in range(K):
+            for basis in PauliStrList_part:
+                h_set.add('I'*k + basis + 'I'*(N-k-M))
 
+    if model_type == 'closed':
+        for i in range(N):
+            h_set.add('I'*i + 'X' + 'I'*(N-i-1))
+            h_set.add('I'*i + 'Y' + 'I'*(N-i-1))
+            h_set.add('I'*i + 'Z' + 'I'*(N-i-1))
+        PauliStrList_part = generate_PauliStrList(M)[1:]
+        for k in range(N-M+1):
+            for basis in PauliStrList_part:
+                h_set.add('I'*(k) + basis + 'I'*(N-k-M))
+        for basis in PauliStrList_part:
+            h_set.add(basis[0] + 'I'*(N-M) + basis[1])
+            
     return h_set
 
 def get_reduced_pauli_strings(pauli_str):
@@ -150,7 +161,8 @@ def get_all_relevant_indices(h_set, H_global_list):
     return set_of_indices
 
 def get_rdm_dict(dm_Mbody, meas_dataset, 
-            h_set, H_global_list, N, M, K):
+                 h_set, H_global_list, N, M, K,
+                 model_type):
     '''Get the dictionary for all relevant reduced density matrices required to calculate A=<hHh-H> and B=i<hH-Hh> 
     Args:
        dm_Mbody: A list of M-body density matrices, which can be obtained by SDP or just tomography
@@ -167,9 +179,14 @@ def get_rdm_dict(dm_Mbody, meas_dataset,
     
     # Replace the reduced density matrices that are associated with local Hamiltonians with dm_Mbody 
     # dm_Mbody can be obtained by SDP or just tomography
-    for k in range(K):  # K: number of subsystems
-        index = list(range(k, k + M, 1))  # [k, k+1, ...]
-        dm_dict[tuple(index)] = dm_Mbody[index[0]]
+    if model_type=='open':
+        for k in range(K):  # K: number of subsystem
+            index = list(range(k, k + M, 1))  # [k, k+1, ...]
+            dm_dict[tuple(index)] = dm_Mbody[index[0]]
+    if model_type=='closed':
+        for k in range(K):  # K: number of subsystems
+            index = [(k + i) % K for i in range(M)]  # [k, k+1, ...]
+            dm_dict[tuple(index)] = dm_Mbody[index[0]]
         
     return dm_dict
 
@@ -215,6 +232,7 @@ def get_current_rdm(layer_operators, dm_dict):
        dm_dict: The dictionary that stores all relevant reduced density matrices required to calculate A=<hHh-H> and B=i<hH-Hh> 
     '''
     dm_dict_new = {}
+    
     for rdm_index in dm_dict: # Loop through every rdm in dm_dict
         rdm = dm_dict[rdm_index]
         dm_dict_new[tuple(rdm_index)] = evolved_rdm(layer_operators, rdm_index, rdm) # Get the evolved reduced density matrix
@@ -250,7 +268,7 @@ def find_h_best(dm_dict, h_set, H_global_list, N, M, K):
             exp = np.trace(np.matmul(np.array(pauliToMatrix(commutator_sub)), np.array(rho)))
             B_tmp += exp*commutator[0]
         B = B_tmp*1j
-
+        
         # Compute commutator [h,[h,H]]
         commutator_2nd_list = [] # [h,[h,H]]
         for h_H in commutator_1st_list:
@@ -264,6 +282,8 @@ def find_h_best(dm_dict, h_set, H_global_list, N, M, K):
         for commutator in commutator_2nd_list:
             relevant_index = get_reduced_pauli_strings(commutator[1])
             rho = dm_dict[tuple(relevant_index)] # reduced density matrices
+            # if np.shape(rho) == ():   
+            #     print(relevant_index)
             commutator_sub = commutator[1].replace('I', '')
             exp = np.trace(np.matmul(np.array(pauliToMatrix(commutator_sub)), np.array(rho)))
             A_tmp += exp*commutator[0]
@@ -328,7 +348,83 @@ def find_incompatible_paulis(pauli_set, given_pauli):
 
     return incompatible_paulis
 
-def find_layer_operator(dm_dict, h_set, H_global_list, N, M, K,
+def find_layer_operator(dm_Mbody, meas_dataset, input_state, N_meas,
+                        h_set, H_global_list, N, M, K,
+                        num_of_sweep,
+                        model_type):
+    '''Find a layer operator of algorithmic cooling
+    Args:
+       dm_dict: The dictionary that stores all relevant reduced density matrices required to calculate A=<hHh-H> and B=i<hH-Hh> 
+       h_set: Set of accessible Pauli operators in the lab
+       H_global_list: A list Pauli strings which describes the global Hamiltonian
+    '''
+    
+    layer_operators_list = [] # A list of operators that forms the layer
+                              # Each element of this list refers to one 'sub-layer' of this layer operator
+                              # For example, we have only one 'sub-layer' in this list if num_of_sweep=0, and two if num_of_sweep=1
+    layer_operators = {} # Initialize the first sweep
+
+    dm_dict = get_rdm_dict(dm_Mbody, meas_dataset, h_set, H_global_list, N, M, K, model_type)
+    while len(h_set) != 0:
+        # Get the operator which gives the most decrease
+        h_best, B, t_opt, decrease = find_h_best(dm_dict, h_set, H_global_list, N, M, K)
+        counter = 0
+        while h_best == N*'I':
+            counter = counter+1
+            meas_dataset_new = generate_meas_dataset(input_state, N_meas, N) 
+            
+            dm = []
+            if model_type=='open':
+                for k in range(K):  # K: number of subsystems
+                    index = list(range(k, k + M, 1))  # [k, k+1, ...]
+                    dm.append(np.array(q_tomography_dm(index, meas_dataset_new, N)))
+                dm_hat = dm.copy()
+            if model_type=='closed':
+                for k in range(K):  # K: number of subsystems
+                    index = [(k + i) % K for i in range(M)]  # [k, k+1, ...]
+                    dm.append(np.array(q_tomography_dm(index, meas_dataset_new, N)))
+                dm_hat = dm.copy()
+
+            dm_dict = get_rdm_dict(dm_hat, meas_dataset_new, h_set, H_global_list, N, M, K, model_type)
+            h_best, B, t_opt, decrease = find_h_best(dm_dict, h_set, H_global_list, N, M, K)
+
+        layer_operators[ tuple([i for i, char in enumerate(h_best) if char != 'I']) ] = tuple((h_best, B, t_opt, decrease))
+        
+        # Evolve the reduced density matrices with this newly-getted operator
+        new_operator = {} # Get the unitary operator we get
+        new_operator[ tuple([i for i, char in enumerate(h_best) if char != 'I']) ] = tuple((h_best, B, t_opt, decrease))
+        dm_dict = get_current_rdm(new_operator, dm_dict)
+        
+        # Updated the accessible set of operators
+        h_set = find_incompatible_paulis(h_set, h_best)
+    
+    layer_operators_list.append(layer_operators)
+    
+    # Get the layout of this layer operator
+    layout = list(layer_operators.keys())
+    
+    # Do the sweep
+    for i in range(num_of_sweep):
+
+        sweep_operators = {}
+
+        for qubit_index in layout:
+
+            h_set = find_compatible_paulis(N, list(qubit_index))
+
+            h_best, B, t_opt, decrease = find_h_best(dm_dict, h_set, H_global_list, N, M, K)
+            sweep_operators[ tuple([i for i, char in enumerate(h_best) if char != 'I']) ] = tuple((h_best, B, t_opt, decrease))
+            
+            new_operator = {}
+            new_operator[ tuple([i for i, char in enumerate(h_best) if char != 'I']) ] = tuple((h_best, B, t_opt, decrease))
+            dm_dict = get_current_rdm(new_operator, dm_dict)
+
+        layer_operators_list.append(sweep_operators)
+
+
+    return layer_operators_list
+
+def find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K,
                         num_of_sweep):
     '''Find a layer operator of algorithmic cooling
     Args:
@@ -407,7 +503,7 @@ def get_dm(N, qiskit_state, qubit_index):
 
     return 1 / (2 ** len(qubit_index)) * dm
 
-def get_HF_state(H_global_list, H_global_matrix, N, M, K):
+def get_HF_state(H_global_list, H_global_matrix, N, M, K, model_type):
     '''Get the product state with the lowest <H>
     Args:
        H_global_list: A list Pauli strings which describes the global Hamiltonian
@@ -422,7 +518,7 @@ def get_HF_state(H_global_list, H_global_matrix, N, M, K):
         input_state = np.kron(input_state, np.array(dm))
     input_state = DensityMatrix(input_state) # This is an N-qubit random tensor product state
 
-    h_set = available_h_set(N, M=1, K=N)
+    h_set = available_h_set(N, M=1, K=N, model_type='open')
     set_of_indices = get_all_relevant_indices(h_set, H_global_list)
 
     exp_H_value = np.real(np.trace( np.matmul(input_state, H_global_matrix) ))
@@ -440,8 +536,8 @@ def get_HF_state(H_global_list, H_global_matrix, N, M, K):
         for qubit_index in set_of_indices:
             dm_dict[tuple(qubit_index)] = np.array( get_dm(N, input_state, qubit_index) )
             
-        # Find the layer operators that gives a decrease to <H>
-        layer_operators_list = find_layer_operator(dm_dict, h_set, H_global_list, N, M, K, num_of_sweep=0)
+        # Find the layer operators that gives a decrease to <H>   
+        layer_operators_list = find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K, num_of_sweep=0)
     
         # Evolve the state with the obtained layer operators
         for i in range(len(layer_operators_list)):
@@ -479,7 +575,7 @@ def SDP_solver_min_C01(coef:float,
                    H:np.ndarray, 
                    measurement_dataset:Dict[str,List[str]], 
                    N:int, M:int, G:int, K:int, P:int,
-                   model_type:str) -> (float,float,float):
+                   model_type:str) -> (float, float, float):
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
     
@@ -517,7 +613,7 @@ def biSection_search_min_C01(higher_bound:float, threshold:float,
                          H:np.ndarray, 
                          measurement_dataset:Dict[str,List[str]], 
                          N:int, M:int, G:int, K:int, P:int,
-                         model_type:str) -> (float,float,float,float):
+                         model_type:str) -> (float, float, float, float):
     '''Use bi-search method to find the minimum value of the relaxation such that there exists at least one solution in the search space,
        with an accuracy of 'threshold'
     '''
@@ -528,6 +624,7 @@ def biSection_search_min_C01(higher_bound:float, threshold:float,
    
     energy_C01, dm_SDP = SDP_solver_min_C01(high, ep, ep_C1, dm_tilde, dm_tilde_C1, H, measurement_dataset, N, M, G, K, P, model_type)
     coef = high
+    
     
     # If no solution exists within the initial higher bounds, increase the higher bound.
     while (math.isinf(energy_C01)) and max_iter > 0:
@@ -599,13 +696,18 @@ def algorithmic_cooling(input_state, N_opt, N_meas,
                                                                                     N, M, G, K, P,
                                                                                     model_type
                                                                                     ) # dm_SDP is the density matrices by SDP
-
+     
             expH_dm_SDPvalue_iter.append(E_min_C01_value) # Save the solved SDP min. value
-            dm_dict = get_rdm_dict(dm_SDP, meas_dataset, h_set, H_global_list, N, M, K)
-            layer_operators_list = find_layer_operator(dm_dict, h_set, H_global_list, N, M, K, num_of_sweep)
+            layer_operators_list = find_layer_operator(dm_SDP, meas_dataset, input_state, N_meas,
+                                                       h_set, H_global_list, N, M, K,
+                                                       num_of_sweep,
+                                                       model_type)
+            
         else:
-            dm_dict = get_rdm_dict(dm_hat, meas_dataset, h_set, H_global_list, N, M, K)
-            layer_operators_list = find_layer_operator(dm_dict, h_set, H_global_list, N, M, K, num_of_sweep)
+            layer_operators_list = find_layer_operator(dm_hat, meas_dataset, input_state, N_meas,
+                                                       h_set, H_global_list, N, M, K,
+                                                       num_of_sweep,
+                                                       model_type)
 
         # Get the expectation value <H>
         exp_H_new = 0
@@ -615,7 +717,7 @@ def algorithmic_cooling(input_state, N_opt, N_meas,
         expH_dm_iter.append(exp_H_new) # Save the expectation value <H>
 
         # Evolve the state with the calculated layer operator 
-        for i in range(len(layer_operators_list)):
+        for i in range(len(layer_operators_list)): # The length of layer_operators_list corresponds to how many sweeps we do in each iteration 
                 
             layer_operators = layer_operators_list[i]
 
@@ -691,7 +793,7 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
     P = 4**M-1 # Number of Pauli basis for each subsystem
     PauliStrList_part = generate_PauliStrList(M)[1:]
     PauliStrList_Gbody = generate_PauliStrList(G)[1:]
-    h_set = available_h_set(N, M, K)
+    h_set = available_h_set(N, M, K, model_type)
     H_global_list = Hamiltonian_global(H_local_list, N, M, K, model_type) # Pauli string representation of the Hamiltonian of the whole system
     H_local_matrix = np.array( Hamiltonian_matrix(H_local_list, model_type) ) # Matrix representation of the local Hamiltonian of subsystems
     H_global_matrix = np.array( Hamiltonian_matrix(H_global_list, model_type) ) # Matrix representation of the Hamiltonian of the whole system
@@ -701,7 +803,7 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
 
     # Initial state
     if initial_guess == 'HF':
-        input_state, exp_H_value_list = get_HF_state(H_global_list, H_global_matrix, N, M, K) # The HF state (the product state with the lowest <H>)
+        input_state, exp_H_value_list = get_HF_state(H_global_list, H_global_matrix, N, M, K, model_type) # The HF state (the product state with the lowest <H>)
     if initial_guess == '00':
         tmp = np.zeros(2**N)
         tmp[0] = 1
@@ -761,19 +863,18 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
     return avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy
         
 
-
 H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
-model_type = 'open'
+model_type = 'closed'
 M = 2 # Number of qubits of subsystems
 G = 3 # Number of qubits of partial global system (C1)
 
-N_opt = 15 # Number of iterations of cooling
-num_of_shots = 50 # Number of experiments we do 
+N_opt = 20 # Number of iterations of cooling
+num_of_shots = 25 # Number of experiments we do 
 
 data = []
 for N in [3,4,5,6,7,8]: # Number of qubits of the entire system
-    for N_meas in [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000]: # Number of measurements in all basis each loop
-        for initial_guess in ['HF', '++']:
+    for N_meas in [10, 100, 1000, 10000]: # Number of measurements in all basis each loop
+        for initial_guess in ['++', 'HF']:
             avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
                                                                                                                                                 N, M, G, H_local_list, model_type)
             for i in list(range(N_opt+1)):

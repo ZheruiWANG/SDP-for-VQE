@@ -384,7 +384,7 @@ def Hamiltonian_matrix(H:List[str], model_type:str) -> List[str]:
     if model_type=='open':
         return Hamiltonian_matrix
     if model_type=='closed':
-        return -Hamiltonian_matrix
+        return Hamiltonian_matrix
 
 def Hamiltonian_global(H_local_list:List[str], N:int, M:int, K:int, model_type:str) -> List[str]:
     '''Given the Hamiltonian of local subsystem (list of Pauli strings)
@@ -650,7 +650,6 @@ def constraints_C0(ep:cp.expressions.variable.Variable,
         constraints += [ep >= -sigma, ep <= sigma]
         constraints += [ep+mean_vec >= -1, ep+mean_vec <= 1]
   
-
     return constraints
 
 
@@ -768,13 +767,12 @@ def constraints_C1(ep_C1:cp.expressions.variable.Variable,
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[4,2], axis=1) == dm_tilde[K-2]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,4], axis=0) == dm_tilde[0]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[K-1]]
-            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
+            #constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
             # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
             # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
             # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
             # # (only works for M=2, G=3)
     
-
     return constraints_C1
 
 def SDP_variables_C2(ep_C2:cp.expressions.variable.Variable, 
@@ -867,7 +865,7 @@ def SDP_solver_min(coef:float,
                    H:np.ndarray, 
                    measurement_dataset:Dict[str,List[str]], 
                    N:int, M:int, G:int, K:int, P:int,
-                   model_type:str) -> (float,float,float):
+                   model_type:str) -> (float, float, float):
     '''Solve the SDP minimization problem with constraints C0 and C0+C1
     '''
     
@@ -931,7 +929,6 @@ def SDP_solver_min(coef:float,
     energy_C01 = prob_C01.solve(solver=cp.SCS, verbose=False)
     if prob_C01.status != cp.OPTIMAL:
         energy_C01 = float('inf') 
-
 
     return energy_C0, energy_C1, energy_C01
 
