@@ -719,7 +719,10 @@ def SDP_variables_C1(ep_C1:cp.expressions.variable.Variable,
     if model_type=='open':
         K_3body = N-G+1 # Number of 3-body subsystems
     if model_type=='closed':
-        K_3body = K # Number of 3-body subsystems
+        if N==3:
+            K_3body = 1
+        else:
+            K_3body = K # Number of 3-body subsystems
     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
     
     dm_tilde_C1 = []
@@ -747,7 +750,10 @@ def constraints_C1(ep_C1:cp.expressions.variable.Variable,
     if model_type=='open':
         K_3body = N-G+1 # Number of 3-body subsystems
     if model_type=='closed':
-        K_3body = K # Number of 3-body subsystems
+        if N==3:
+            K_3body = 1
+        else:
+            K_3body = K # Number of 3-body subsystems
     P_3body = 4**G-1 # Number of Pauli basis for 3-body subsystems
 
     constraints_C1 = []
@@ -755,23 +761,28 @@ def constraints_C1(ep_C1:cp.expressions.variable.Variable,
         constraints_C1 += [dm_tilde_C1[i] >> 1e-8]  # non-negative eigenvalues
     
     if model_type=='open':
-        for i in range(N-G+1):
+        for i in range(K_3body):
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
             constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
     if model_type=='closed':
-        for i in range(N-G+1): # the first N-2 sub-global system
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[4,2], axis=1) == dm_tilde[i]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,4], axis=0) == dm_tilde[i+1]]
-        if K>=4: # Add the globally compatitble constraints between the head and tail local systems (only works for M=2)
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-1]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[4,2], axis=1) == dm_tilde[K-2]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,4], axis=0) == dm_tilde[0]]
-            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[K-1]]
-            #constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
-            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
-            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
-            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
-            # # (only works for M=2, G=3)
+        if N==3:
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[0], dims=[2,2,2], axis=2) == dm_tilde[0]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[0], dims=[2,2,2], axis=1) == dm_tilde[2]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[0], dims=[2,2,2], axis=0) == dm_tilde[1]]
+        else:
+            for i in range(K_3body-1): # the first N-2 sub-global system
+                constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,2,2], axis=2) == dm_tilde[i]]
+                constraints_C1 += [cp.partial_trace(dm_tilde_C1[i], dims=[2,2,2], axis=0) == dm_tilde[i+1]]
+            # Add the globally compatitble constraints between the head and tail local systems (only works for M=2)
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-1]]
+            # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[4,2], axis=1) == dm_tilde[K-2]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K_3body-1], dims=[2,2,2], axis=0) == dm_tilde[0]]
+            constraints_C1 += [cp.partial_trace(dm_tilde_C1[K_3body-1], dims=[2,2,2], axis=2) == dm_tilde[K-1]]
+                #constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,4], axis=0) == dm_tilde[K-2]]
+                # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-2], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+                # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[4,2], axis=1) == dm_tilde[0]]
+                # constraints_C1 += [cp.partial_trace(dm_tilde_C1[K-1], dims=[2,2,2], axis=1) == dm_tilde[K-1]]
+                # # (only works for M=2, G=3)
     
     return constraints_C1
 
