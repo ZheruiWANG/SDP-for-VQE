@@ -153,7 +153,8 @@ def get_all_relevant_indices(h_set, H_global_list):
 
     for h in h_set:
         for H in H_global_list:
-            tmp = pauli_commutator(h, H)
+            cleaned_H = H.replace('-', '')
+            tmp = pauli_commutator(h, cleaned_H)
             if tmp != 0:
                 relevant_index = get_reduced_pauli_strings(tmp[1])
                 set_of_indices.add(tuple(relevant_index))
@@ -255,7 +256,8 @@ def find_h_best(dm_dict, h_set, H_global_list, N, M, K):
         # Compute commutator [h,H]
         commutator_1st_list = [] # [h,H]
         for H in H_global_list:
-            tmp = pauli_commutator(h, H)
+            cleaned_H = H.replace('-', '')
+            tmp = pauli_commutator(h, cleaned_H)
             if tmp != 0:
                 commutator_1st_list.append(tmp)
 
@@ -660,8 +662,11 @@ def algorithmic_cooling(input_state, N_opt, N_meas,
     '''
     # Get the energy of the initial input state
     E = 0
-    for pauli_basis in H_global_list:
-        E = E + input_state.expectation_value(oper=Pauli(pauli_basis), qargs=None)
+    for pauli_str in H_global_list:
+        num_negatives = pauli_str.count('-')
+        phase = (-1) ** num_negatives
+        cleaned_pauli_string = pauli_str.replace('-', '')
+        E = E + phase*input_state.expectation_value(oper=Pauli(cleaned_pauli_string), qargs=None)
 
     # Define lists for saving the results
     expH_dm_iter = [E]
@@ -748,7 +753,7 @@ def get_figure(avg_expH, std_expH,
     '''
     
     plt.figure()
-    iteration_list = list(range(N_opt+1))
+    iteration_list = range(N_opt+1)
     
     # Plot the theoretical ground state energy
     plt.axhline(y = ground_state_energy, color='r', linestyle='-', linewidth=1.25, label='GS energy')
@@ -862,9 +867,8 @@ def main(initial_guess, N_opt, N_meas, num_of_shots,
 
     return avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy
         
-
-H_local_list = ['XX','YY'] # Pauli string representation of the local Hamiltonian of subsystems
-model_type = 'closed'
+H_local_list = ['XX','-YY','ZZ'] # Pauli string representation of the local Hamiltonian of subsystems
+model_type = 'open'
 M = 2 # Number of qubits of subsystems
 G = 3 # Number of qubits of partial global system (C1)
 
@@ -874,7 +878,7 @@ num_of_shots = 25 # Number of experiments we do
 data = []
 for N in [3,4,5,6,7,8]: # Number of qubits of the entire system
     for N_meas in [10, 100, 1000, 10000]: # Number of measurements in all basis each loop
-        for initial_guess in ['++', 'HF']:
+        for initial_guess in ['++','HF']:
             avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
                                                                                                                                                 N, M, G, H_local_list, model_type)
             for i in list(range(N_opt+1)):

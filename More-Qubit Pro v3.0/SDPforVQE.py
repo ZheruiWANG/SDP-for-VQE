@@ -236,8 +236,12 @@ def pauliToMatrix(pauli_str:str) -> qutip.qobj.Qobj:
     '''Given a Pauli string basis (str),
        output its corresponding matrix representation (Qobj data).
     '''
+    num_negatives = pauli_str.count('-')
+    phase = (-1) ** num_negatives
+    cleaned_pauli_string = pauli_str.replace('-', '')
+
     pauli_basis_list = list()
-    for basis in pauli_str:
+    for basis in cleaned_pauli_string:
         if basis == 'I':
             pauli_basis_list.append(qeye(2))
         elif basis == 'X':
@@ -246,7 +250,7 @@ def pauliToMatrix(pauli_str:str) -> qutip.qobj.Qobj:
             pauli_basis_list.append(sigmay())
         else:
             pauli_basis_list.append(sigmaz())
-    return tensor(pauli_basis_list)
+    return tensor(pauli_basis_list)*phase
 
 def q_tomography_dm(qubit_index:List[int], measurement_dataset:Dict[str,List[str]], N:int) -> qutip.qobj.Qobj:
     ''' Do quantum tomography for certain qubits according to the index,
@@ -405,7 +409,7 @@ def Hamiltonian_global(H_local_list:List[str], N:int, M:int, K:int, model_type:s
 
     return H_global
 
-def ground_state(H_matrix:np.ndarray) -> (float,np.ndarray):
+def ground_state(H_matrix:np.ndarray) -> (float, np.ndarray):
     '''Given a matrix representation of a Hamiltonian,
        find the ground state energy, i.e. the minimum eigenvalue of the matrix,
        and the ground state density matrix
