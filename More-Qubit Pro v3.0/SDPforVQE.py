@@ -189,15 +189,19 @@ def exp_var_calculator(measurement_dataset:Dict[str,List[str]], pauli_basis_str:
     ''' Given a Pauli basis (on partial qubits, e.g.: XIXZY, IIIXX, ZIIII, etc.) and dataset,
         return its applicable measurement outcome expectation value and variance.
     '''
+    num_negatives = pauli_basis_str.count('-')
+    phase = (-1) ** num_negatives
+    cleaned_pauli_string = pauli_basis_str.replace('-', '')
+
     #measurement_dataset = {key: value for key, value in measurement_dataset.items() if value} # For reducing the complexity
     output = list([])
     for key in measurement_dataset:
-        if pauli_basis_str.count('I') == sum(char1 != char2 for char1, char2 in zip(pauli_basis_str, key)):
+        if cleaned_pauli_string.count('I') == sum(char1 != char2 for char1, char2 in zip(cleaned_pauli_string, key)):
             output = measurement_dataset[key] + output
 
-    while pauli_basis_str.find('I') != -1:
-        index_I = pauli_basis_str.find('I')
-        pauli_basis_str = pauli_basis_str[:index_I] + pauli_basis_str[(index_I + 1):]
+    while cleaned_pauli_string.find('I') != -1:
+        index_I = cleaned_pauli_string.find('I')
+        cleaned_pauli_string = cleaned_pauli_string[:index_I] + cleaned_pauli_string[(index_I + 1):]
         for j in range(len(output)):
             words = output[j]
             output[j] = words[:index_I] + words[(index_I + 1):]
@@ -212,7 +216,7 @@ def exp_var_calculator(measurement_dataset:Dict[str,List[str]], pauli_basis_str:
         expectation_value = np.average(meas_outcome)
         variance = np.var(meas_outcome)
 
-    return expectation_value, variance
+    return phase*expectation_value, variance
 
 def num_meas_sub_calculator(measurement_dataset:Dict[str,List[str]], pauli_basis_str:str) -> int:
     ''' Given a Pauli basis (on partial qubits, e.g.: XIXZY, IIIXX, ZIIII, etc.) and dataset,

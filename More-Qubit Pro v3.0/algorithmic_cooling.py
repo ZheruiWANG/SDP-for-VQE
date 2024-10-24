@@ -423,7 +423,6 @@ def find_layer_operator(dm_Mbody, meas_dataset, input_state, N_meas,
 
         layer_operators_list.append(sweep_operators)
 
-
     return layer_operators_list
 
 def find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K,
@@ -474,7 +473,6 @@ def find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K,
             dm_dict = get_current_rdm(new_operator, dm_dict)
 
         layer_operators_list.append(sweep_operators)
-
 
     return layer_operators_list
 
@@ -605,7 +603,6 @@ def SDP_solver_min_C01(coef:float,
     dm_SDP = []
     for i in range(K):
         dm_SDP.append(dm_tilde_copy01[i].value)
-
 
     return energy_C01, dm_SDP
 
