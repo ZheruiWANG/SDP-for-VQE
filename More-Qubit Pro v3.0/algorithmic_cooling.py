@@ -70,20 +70,25 @@ def pauli_commutator(pauli_str1, pauli_str2):
         INPUT: 'X', 'Y' 
         OUTPUT: [2j, Z] (Because [X,Y]=2iZ)
     '''
-    
-    commutator = pauliToMatrix(pauli_str1)*pauliToMatrix(pauli_str2) - pauliToMatrix(pauli_str2)*pauliToMatrix(pauli_str1)
+    num_negatives_1 = pauli_str1.count('-')
+    num_negatives_2 = pauli_str2.count('-')
+    phase = (-1) ** (num_negatives_1 + num_negatives_2)
+    cleaned_pauli_str1 = pauli_str1.replace('-', '')
+    cleaned_pauli_str2 = pauli_str2.replace('-', '')
+
+    commutator = pauliToMatrix(cleaned_pauli_str1)*pauliToMatrix(cleaned_pauli_str2) - pauliToMatrix(cleaned_pauli_str2)*pauliToMatrix(cleaned_pauli_str1)
     
     if np.all(np.array(commutator) == 0):
         return 0 
     else:
         commutator_str = ''
         coef = 2
-        for i in range(len(pauli_str1)):
-            result = pauli_product(pauli_str1[i], pauli_str2[i])
+        for i in range(len(cleaned_pauli_str1)):
+            result = pauli_product(cleaned_pauli_str1[i], cleaned_pauli_str2[i])
             commutator_str = commutator_str + result[1]
             coef = coef*result[0]
     
-        return coef, commutator_str
+        return coef*phase, commutator_str
 
 def qiskit_statevec_map(statevec_qiskit, N):
     '''Qiskit orders qubits in a endian way, 
@@ -256,8 +261,7 @@ def find_h_best(dm_dict, h_set, H_global_list, N, M, K):
         # Compute commutator [h,H]
         commutator_1st_list = [] # [h,H]
         for H in H_global_list:
-            cleaned_H = H.replace('-', '')
-            tmp = pauli_commutator(h, cleaned_H)
+            tmp = pauli_commutator(h, H)
             if tmp != 0:
                 commutator_1st_list.append(tmp)
 
@@ -423,6 +427,7 @@ def find_layer_operator(dm_Mbody, meas_dataset, input_state, N_meas,
 
         layer_operators_list.append(sweep_operators)
 
+
     return layer_operators_list
 
 def find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K,
@@ -473,6 +478,7 @@ def find_layer_operator_HF(dm_dict, h_set, H_global_list, N, M, K,
             dm_dict = get_current_rdm(new_operator, dm_dict)
 
         layer_operators_list.append(sweep_operators)
+
 
     return layer_operators_list
 
@@ -527,7 +533,7 @@ def get_HF_state(H_global_list, H_global_matrix, N, M, K, model_type):
     
     qc = QuantumCircuit(N)
 
-    while abs(diff) > 1e-3:
+    while abs(diff) > 1e-4:
 
         exp_H_value_old = exp_H_value
         
@@ -874,7 +880,7 @@ num_of_shots = 25 # Number of experiments we do
 
 data = []
 for N in [3,4,5,6,7,8]: # Number of qubits of the entire system
-    for N_meas in [10, 100, 1000, 10000]: # Number of measurements in all basis each loop
+    for N_meas in [10,100,1000,10000]: # Number of measurements in all basis each loop
         for initial_guess in ['++','HF']:
             avg_expH, std_expH, avg_expH_enhanced, std_expH_enhanced, avg_expH_enhanced_SDPvalue, std_expH_enhanced_SDPvalue, ground_state_energy = main(initial_guess, N_opt, N_meas, num_of_shots, 
                                                                                                                                                 N, M, G, H_local_list, model_type)
